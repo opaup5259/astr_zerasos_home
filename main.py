@@ -14,6 +14,17 @@ for _root, _dirs, _files in os.walk(_PLUGIN_DIR):
             try: os.remove(os.path.join(_root, _f))
             except: pass
 from astrbot.api.all import *
+
+# 延迟导入 auto_publish 避免循环引用
+_AUTO_PUBLISHER = None
+
+def _get_auto_publisher(context, config):
+    global _AUTO_PUBLISHER
+    if _AUTO_PUBLISHER is None:
+        from auto_publish import AutoPublishService
+        _AUTO_PUBLISHER = AutoPublishService(context, config)
+    return _AUTO_PUBLISHER
+
 logger = logging.getLogger("astr_zerasos_home")
 
 # ========== Git ==========
@@ -59,7 +70,7 @@ async def ensure_repo(user="", token=""):
 async def commit_push(files, msg, user="", token=""):
     await ensure_repo(user=user, token=token)
     for f in files:
-        await _git(["add", os.path.relpath(f, _WORK_DIR)], user=user, token=token)
+        await _git(["add", f], user=user, token=token)
     await _git(["commit", "-m", msg], user=user, token=token)
     await _git(["push", "origin", _REPO_BRANCH], user=user, token=token)
 
@@ -218,7 +229,9 @@ class ZerasosHomePlugin(Star):
         self._enabled = True
         self._github_user = ""
         self._github_token = ""
+        self._auto_publisher = None
         self._load_config()
+        self._init_auto_publisher()
 
     def _load_config(self):
         self._enabled = bool(self.config.get("enabled", True))
@@ -236,11 +249,27 @@ class ZerasosHomePlugin(Star):
 
     def on_config_update(self, config: dict):
         self.config = config or {}; self._load_config()
+        self._init_auto_publisher()
 
-    async def terminate(self): pass
+    async def terminate(self):
+        if self._auto_publisher:
+            self._auto_publisher.stop_scheduler()
 
     @staticmethod
     def _br(t): return str(t).replace("\n","<br />")
+
+    def _init_auto_publisher(self):
+        """初始化自动发布服务"""
+        try:
+            if self._auto_publisher is None:
+                from auto_publish import AutoPublishService
+                self._auto_publisher = AutoPublishService(self.context, self.config)
+            else:
+                self._auto_publisher.on_config_update(self.config)
+            self._auto_publisher.set_credentials(self._github_user, self._github_token)
+            self._auto_publisher.start_scheduler(self._github_user, self._github_token)
+        except Exception as e:
+            logger.warning(f"自动发布服务初始化失败: {e}")
 
     @command("zh")
     async def zh_router(self, event: AstrMessageEvent):
@@ -249,7 +278,7 @@ class ZerasosHomePlugin(Star):
             if not self._is_admin(event): yield event.plain_result(self._br("你没有权限")); return
             if not self._enabled: yield event.plain_result(self._br("插件已禁用")); return
         if subcmd=="help":
-            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list<br/>  /zh music add <网易云ID><br/>  /zh music del <网易云ID><br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>修改后自动提交 GitHub"))
+            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list<br/>  /zh music add <网易云ID><br/>  /zh music del <网易云ID><br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish - 强制运行一次自动发布说说<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
             return
         try:
             user=self._github_user; token=self._github_token
@@ -267,6 +296,10 @@ class ZerasosHomePlugin(Star):
                 yield event.plain_result(self._br(await self._cmd_moments(parts,user,token)))
             elif subcmd=="about":
                 yield event.plain_result(self._br(await self._cmd_about(parts,user,token)))
+            elif subcmd=="ai":
+                yield event.plain_result(self._br(await self._cmd_ai(parts,user,token)))
+            elif subcmd=="config":
+                yield event.plain_result(self._br(await self._cmd_config(parts)))
             else:
                 yield event.plain_result(self._br("未知指令，/zh help 查看帮助"))
         except Exception as e:
@@ -363,3 +396,37 @@ class ZerasosHomePlugin(Star):
             return await set_about(title,body,user=user,token=token)
         about=get_about()
         return "关于页面暂无内容" if not about["content"] else f"=== {about['title']} ===\n\n{about['content'][:500]}"
+
+    async def _cmd_ai(self,parts,user="",token=""):
+        """AI 相关指令"""
+        if len(parts)<3: return "用法: /zh ai <publish|status>"
+        a=parts[2].lower()
+        if a=="publish":
+            # 强制运行一次自动发布
+            if self._auto_publisher is None:
+                return "自动发布服务未初始化"
+            self._auto_publisher.set_credentials(user, token)
+            return await self._auto_publisher.force_run()
+        if a=="status":
+            if self._auto_publisher is None:
+                return "自动发布服务未初始化"
+            status_info = []
+            status_info.append(f"启用: {'✅' if self._auto_publisher._enabled else '❌'}")
+            status_info.append(f"Cron: {self._auto_publisher._cron}")
+            status_info.append(f"调度器运行中: {'✅' if (self._auto_publisher._task and not self._auto_publisher._task.done()) else '❌'}")
+            return "\n".join(status_info)
+        return "用法: /zh ai <publish|status>"
+
+    async def _cmd_config(self,parts):
+        """查看配置"""
+        if len(parts)<3: return "用法: /zh config <字段>"
+        a=parts[2].lower()
+        if a=="auto_publish":
+            ap=self.config.get("auto_publish",{})
+            lines=["=== 自动发布配置 ==="]
+            lines.append(f"  启用: {ap.get('enabled',False)}")
+            lines.append(f"  Cron: {ap.get('cron','30 8 * * *')}")
+            prompt=ap.get('llm_prompt','')
+            lines.append(f"  自定义Prompt: {'有' if prompt else '无（使用默认）'}")
+            return "\n".join(lines)
+        return f"未知配置字段: {a}"

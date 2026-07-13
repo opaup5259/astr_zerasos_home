@@ -2,8 +2,6 @@
 
 基于 XinghuisamaBlogs 的 Zerasos-Home 博客管理系统 —— AstrBot 插件。通过 GitHub → Vercel 链路管理 [Zerasos-Home](https://github.com/opaup5259/Zerasos-Home) 博客的全部内容，支持项目、相册、歌单、说说、动态、关于页面的增删改查。
 
-交流与反馈：**[点击加入 QQ 群](https://qm.qq.com/q/Qr45Vz0a8o)**
-
 ## 架构概览
 
 ```
