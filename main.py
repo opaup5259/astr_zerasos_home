@@ -363,6 +363,47 @@ async def set_music_title(idx, title, user="", token=""):
     await commit_push(["siteConfig.ts"], "chore: update playlist", user=user, token=token)
     return f"已设置第 {idx+1} 位标题为「{title}」"
 
+# ========== 说说（chatter）操作 ==========
+def list_chatters():
+    files = _listdir("chatters")
+    result = []
+    for f in files or []:
+        if f.endswith(".md"):
+            content = _read("chatters/" + f)
+            fm = _parse_fm(content)
+            result.append({"file": f, "title": fm.get("title", f)})
+    result.sort(key=lambda x: x["file"], reverse=True)
+    return result
+
+async def new_chatter(title, body, user="", token=""):
+    now = datetime.datetime.now()
+    slug = now.strftime("%Y-%m-%d-%H%M%S")
+    chatter_content = "---\n"
+    chatter_content += f"title: {title}\n"
+    chatter_content += f"date: '{now.strftime(\"%Y-%m-%d %H:%M:%S\")}'\n"
+    chatter_content += "tags:\n- 日常\n"
+    chatter_content += "mood: 日常\n"
+    chatter_content += "cover: ''\n"
+    chatter_content += "description: ''\n"
+    chatter_content += "---\n\n"
+    chatter_content += body + "\n"
+    _write("chatters/" + slug + ".md", chatter_content)
+    await ensure_repo(user=user, token=token)
+    await commit_push(["chatters/" + slug + ".md"], "chore: add chatter " + title, user=user, token=token)
+    return f"已发布说说 [{title}]"
+
+async def del_chatter(filename, user="", token=""):
+    if not filename.endswith(".md"):
+        filename += ".md"
+    cnt = _read("chatters/" + filename)
+    if not cnt:
+        return f"未找到说说 {filename}"
+    _delete("chatters/" + filename)
+    await ensure_repo(user=user, token=token)
+    await commit_push(["chatters/" + filename], "chore: delete chatter " + filename, user=user, token=token)
+    return f"已删除说说 {filename}"
+
+
 # ========== 插件主类 ==========
 @register("astr_zerasos_home", "opaup", "Zerasos-Home 博客管理 - GitHub + Vercel 一键管理", "1.0.12")
 class ZerasosHomePlugin(Star):
