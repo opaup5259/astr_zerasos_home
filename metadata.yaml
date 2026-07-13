@@ -1,6 +1,13 @@
 name: astr_zerasos_home
 desc: Zerasos-Home 博客管理 - GitHub + Vercel 一键管理
 help: "/zh help 查看全部指令"
-version: "1.0.1"
+version: "1.0.11"
 author: "opaup"
 repo: "https://github.com/opaup5259/astr_zerasos_home.git"
+
+default_config:
+  enabled: true
+  admin_ids:
+    - "525915186"
+  github_user: "opaup5259"
+  github_token: "ghp_Yj…KLyU"

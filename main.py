@@ -7,7 +7,6 @@ import yaml
 
 sys.dont_write_bytecode = True
 
-# 清除 .pyc 缓存
 _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 for _root, _dirs, _files in os.walk(_PLUGIN_DIR):
     for _d in _dirs:
@@ -24,20 +23,12 @@ logger = logging.getLogger("astr_zerasos_home")
 # ========== Git 异步操作 ==========
 
 _REPO_BRANCH = "main"
-_WORK_DIR = os.path.join(tempfile.gettempdir(), "zerasos-home-repo")
-
-# 以下变量在插件 __init__ 时从 config 加载
-_GITHUB_USER = ""
-_GITHUB_TOKEN = ""
 _REPO_FULL = "opaup5259/Zerasos-Home"
+_WORK_DIR = os.path.join(tempfile.gettempdir(), "zerasos-home-repo")
 
 
 def _repo_url():
-    """从配置构建带认证的仓库 URL"""
-    u = _GITHUB_USER
-    p = _GITHUB_TOKEN
-    if u and p:
-        return f"https://{u}:{p}@github.com/{_REPO_FULL}.git"
+    """使用系统 git-credentials 中的 token 认证"""
     return f"https://github.com/{_REPO_FULL}.git"
 
 
@@ -54,14 +45,14 @@ async def _git(args, cwd=None):
         proc.kill()
         raise RuntimeError(f"git {' '.join(args)} 超时")
     if proc.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args)} 失败: {stderr.decode()[:200]}")
+        err = stderr.decode()[:300]
+        raise RuntimeError(f"git {' '.join(args)} 失败: {err}")
     return stdout.decode()
 
 
 async def ensure_repo():
     url = _repo_url()
     if os.path.isdir(os.path.join(_WORK_DIR, ".git")):
-        # 更换 remote 的 URL（兼容 token 变更的情况）
         await _git(["remote", "set-url", "origin", url])
         await _git(["pull", "origin", _REPO_BRANCH])
     else:
@@ -279,7 +270,7 @@ async def set_about(title, body):
 
 # ========== 插件主类 ==========
 
-@register("astr_zerasos_home", "opaup", "Zerasos-Home 博客管理", "1.0.8")
+@register("astr_zerasos_home", "opaup", "Zerasos-Home 博客管理", "1.0.11")
 class ZerasosHomePlugin(Star):
 
     def __init__(self, context: Context, config: dict = None):
