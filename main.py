@@ -248,8 +248,7 @@ def _make_song_list_text(songs):
     lines.append("  ],")
     return "\n".join(lines)
 
-def _fmt_list():
-    raw = _fetch_remote_site_config()
+def _fmt_list(raw):
     songs = _parse_song_list(raw)
     if not songs:
         return "歌单为空"
@@ -276,7 +275,9 @@ def _inject_song_list(raw, songs):
     return raw
 
 async def list_music(user="", token=""):
-    return _fmt_list()
+    await ensure_repo(user=user, token=token)
+    raw = _read("siteConfig.ts")
+    return _fmt_list(raw)
 
 async def add_music(sid, user="", token=""):
     raw = _read("siteConfig.ts")
