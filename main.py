@@ -415,6 +415,54 @@ async def del_chatter(filename, user="", token=""):
     return f"已删除说说 {filename}"
 
 
+# ========== 动态（moments）操作 ==========
+def list_moments():
+    """列出 moments/ 目录下的所有动态"""
+    files = _listdir("moments")
+    result = []
+    for f in files or []:
+        if f.endswith(".md"):
+            content = _read("moments/" + f)
+            fm = _parse_fm(content)
+            result.append({"id": f.replace(".md", ""), "file": f, "content": fm.get("content", "")[:80]})
+    result.sort(key=lambda x: x["id"], reverse=True)
+    return result
+
+
+async def new_moment(content, title="", location="", images=None, user="", token=""):
+    """发布一条动态到 moments/ 目录"""
+    now = datetime.datetime.now()
+    slug = now.strftime("%Y-%m-%d-%H%M%S")
+    import json as _json
+    
+    moment_content = "---\n"
+    moment_content += f"title: {title or '动态'}\n"
+    date_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    moment_content += f"date: '{date_str}'\n"
+    moment_content += f"content: {content}\n"
+    moment_content += f"location: '{location}'\n"
+    moment_content += f"images: {_json.dumps(images or [], ensure_ascii=False)}\n"
+    moment_content += "---\n\n"
+    moment_content += content + "\n"
+    _write(f"moments/{slug}.md", moment_content)
+    await ensure_repo(user=user, token=token)
+    await commit_push([f"moments/{slug}.md"], f"chore: add moment {title or '动态'}", user=user, token=token)
+    return f"已发布动态 [{title or '动态'}]"
+
+
+async def del_moment(mid, user="", token=""):
+    """删除 moments/ 目录下的动态"""
+    if not mid.endswith(".md"):
+        mid += ".md"
+    cnt = _read("moments/" + mid)
+    if not cnt:
+        return f"未找到动态 {mid}"
+    _delete("moments/" + mid)
+    await ensure_repo(user=user, token=token)
+    await commit_push(["moments/" + mid], "chore: delete moment " + mid, user=user, token=token)
+    return f"已删除动态 {mid}"
+
+
 # ========== 博客文章（blog post）操作 ==========
 async def new_blog_post(title, body, user="", token=""):
     """发布一篇博客文章到 posts/ 目录"""

@@ -107,9 +107,11 @@ class AutoPublishService:
         )
 
     async def _call_llm(self, prompt: str, system_prompt: str = None, kb_query: str = "", debug_info: list = None) -> str:
-        """调用 AstrBot LLM Provider 生成内容，可选知识库增强"""
+        """调用 AstrBot LLM Provider 生成内容，可选知识库 + 人格增强"""
         kb_used = False
         kb_count = 0
+        kb_total = 0
+        persona_used = False
         try:
             provider = self.context.get_using_provider()
             if provider is None:
@@ -118,16 +120,34 @@ class AutoPublishService:
                     debug_info.append("⚠️ LLM Provider 不可用，使用备用模板")
                 return self._fallback_generate()
 
-            # 知识库检索
+            # ====== 人格系统 ======
+            persona_text = ""
+            try:
+                if hasattr(self.context, 'persona_manager') and self.context.persona_manager:
+                    persona = self.context.persona_manager.get_current_persona()
+                    if persona and hasattr(persona, 'prompt') and persona.prompt:
+                        persona_text = persona.prompt
+                        persona_used = True
+                        logger.info(f"已加载人格: 泽拉索斯")
+            except Exception as e:
+                logger.warning(f"人格加载失败: {e}")
+
+            if debug_info is not None:
+                if persona_used:
+                    debug_info.append(f"🧑 人格已加载: 泽拉索斯")
+                else:
+                    debug_info.append("ℹ️ 人格管理器未启用，使用默认系统提示")
+
+            # ====== 知识库检索 ======
             kb_context = ""
             if kb_query and hasattr(self.context, 'kb_manager') and self.context.kb_manager:
                 try:
-                    kb_names = ["通用知识库", "助手知识库", "泽拉索斯"]
+                    kb_names = ["通用知识库", "助手知识库", "泽拉索斯", "小说正文"]
                     result = await self.context.kb_manager.retrieve(
                         query=kb_query,
                         kb_names=kb_names,
                         top_k_fusion=10,
-                        top_m_final=5,
+                        top_m_final=3,
                     )
                     if result and result.get("chunks"):
                         texts = []
@@ -137,19 +157,32 @@ class AutoPublishService:
                             kb_context = "\n\n以下是与当前主题相关的知识库内容，请参考：\n" + "\n---\n".join(texts)
                             kb_used = True
                             kb_count = len(texts)
-                            logger.info(f"知识库检索到 {kb_count} 条相关内容")
+                            # 统计各知识库匹配数
+                            from collections import Counter
+                            kb_counter = Counter(c.get('kb_name','?') for c in result["chunks"])
+                            kb_total = sum(kb_counter.values())
+                            logger.info(f"知识库检索到 {kb_count} 条相关内容 (共检索 {kb_total} 个片段)")
                 except Exception as e:
                     logger.warning(f"知识库检索失败: {e}")
                     if debug_info is not None:
                         debug_info.append(f"⚠️ 知识库检索失败: {str(e)[:100]}")
 
+            # ====== 构建 system_prompt ======
             sp = system_prompt or "你是一个有个人特色的生活博主，擅长写简短有趣的「说说」。"
+
+            # 添加人格到 system prompt
+            if persona_text:
+                sp += f"\n\n你的身份设定：\n{persona_text}"
+
+            # 添加知识库上下文
             if kb_context:
                 sp += "\n\n你可以参考以下背景知识来生成内容，但不要直接复制。" + kb_context
 
             if debug_info is not None:
                 if kb_used:
                     debug_info.append(f"📚 知识库已检索: 匹配到 {kb_count} 条相关内容")
+                    if kb_total > 0:
+                        debug_info.append(f"📊 知识库检索统计: 共扫描 {kb_total} 个知识片段")
                 else:
                     debug_info.append("ℹ️ 知识库: 未检索到相关内容")
 
@@ -291,11 +324,11 @@ class AutoPublishService:
         except:
             pass
 
-        # 根据类型构建知识库查询关键词
+        # 根据类型构建知识库查询关键词（更丰富的查询，利用完整日期上下文）
         kb_query_map = {
-            "shuoshuo": f"今天{weather_info} 日常 生活 心情 趣事",
-            "zatan": f"最近的热门话题 日常 思考 感悟 生活 见闻",
-            "blog": "技术 分享 教程 经验 思考 观点",
+            "shuoshuo": f"{date_ctx} {weather_info} 日常 生活 心情 趣事 今天发生的事 个人感悟 日常分享",
+            "zatan": f"{date_ctx} {weather_info} 最近的热门话题 日常 思考 感悟 生活 见闻 讨论 闲聊 随想 读书 电影",
+            "blog": f"{date_ctx} 技术 分享 教程 教程指南 经验 思考 观点 深度 主题写作 编程 人生感悟",
         }
         kb_query = kb_query_map.get(content_type, "")
         # 将天气信息拼进 prompt
@@ -313,10 +346,18 @@ class AutoPublishService:
     # ========== 发布逻辑 ==========
 
     async def _publish_to_blog(self, title: str, body: str, content_type: str = "shuoshuo") -> str:
-        """调用 main.py 的函数发布内容到博客"""
-        from .main import new_chatter, new_blog_post
+        """调用 main.py 的函数发布内容到博客
+        
+        路由规则:
+        - shuoshuo → moments/ 目录 (调用 new_moment)
+        - zatan → chatters/ 目录 (调用 new_chatter)
+        - blog → posts/ 目录 (调用 new_blog_post)
+        """
+        from .main import new_chatter, new_blog_post, new_moment
         if content_type == "blog":
             return await new_blog_post(title, body, user=self._user, token=self._token)
+        elif content_type == "shuoshuo":
+            return await new_moment(body, title=title, user=self._user, token=self._token)
         return await new_chatter(title, body, user=self._user, token=self._token, chatter_type=content_type)
 
     async def force_run(self, content_type: str = "shuoshuo") -> str:
@@ -328,14 +369,29 @@ class AutoPublishService:
             # 标记使用的 prompt/persona
             prompt_template = self.PROMPTS.get(content_type, self.PROMPTS["shuoshuo"])
             system_prompt = self.SYSTEM_PROMPTS.get(content_type, self.SYSTEM_PROMPTS["shuoshuo"])
-            debug_info.append(f"🤖 角色/人格: {system_prompt[:60]}…" if len(system_prompt) > 60 else f"🤖 角色/人格: {system_prompt}")
+
+            # 尝试从上下文加载人格信息
+            persona_loaded = False
+            try:
+                if hasattr(self.context, 'persona_manager') and self.context.persona_manager:
+                    persona = self.context.persona_manager.get_current_persona()
+                    if persona and hasattr(persona, 'prompt') and persona.prompt:
+                        debug_info.append(f"🧑 人格已加载: 泽拉索斯 (prompt: {persona.prompt[:80]}…)")
+                        persona_loaded = True
+            except Exception:
+                pass
+
+            if not persona_loaded:
+                debug_info.append(f"🤖 默认角色: {system_prompt[:60]}…" if len(system_prompt) > 60 else f"🤖 默认角色: {system_prompt}")
+
             debug_info.append(f"📝 提示词: {prompt_template[:100]}…" if len(prompt_template) > 100 else f"📝 提示词: {prompt_template}")
             
-            # 标记知识库查询关键词
+            # 标记知识库查询关键词（与 generate_chatter 保持一致）
+            date_ctx = self._get_date_context()
             kb_query_map = {
-                "shuoshuo": "今天 日常 生活 心情 趣事",
-                "zatan": "最近的热门话题 日常 思考 感悟 生活 见闻",
-                "blog": "技术 分享 教程 经验 思考 观点",
+                "shuoshuo": f"{date_ctx} 日常 生活 心情 趣事 今天发生的事 个人感悟 日常分享",
+                "zatan": f"{date_ctx} 最近的热门话题 日常 思考 感悟 生活 见闻 讨论 闲聊 随想 读书 电影",
+                "blog": f"{date_ctx} 技术 分享 教程 教程指南 经验 思考 观点 深度 主题写作 编程 人生感悟",
             }
             kb_q = kb_query_map.get(content_type, "")
             debug_info.append(f"🔍 知识库检索关键词: {kb_q}")
