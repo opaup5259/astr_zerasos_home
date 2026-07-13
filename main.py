@@ -414,6 +414,9 @@ class ZerasosHomePlugin(Star):
         except Exception as e:
             logger.warning(f"自动发布服务初始化失败: {e}")
 
+# ————————————指令入口——————————————————
+# ————————————指令入口——————————————————
+# ————————————指令入口——————————————————
     @command("zh")
     async def zh_router(self, event: AstrMessageEvent):
         text=event.message_str.strip(); parts=text.split(); subcmd=parts[1].lower() if len(parts)>=2 else "help"
@@ -488,6 +491,9 @@ class ZerasosHomePlugin(Star):
         if len(args)<2: return "请提供 album_id 和 URL"
         return await add_photo(args[0].strip(),args[1].strip(),args[2].strip() if len(args)>2 else "",user=user,token=token)
 
+# ——————————————音乐——————————————————————————
+# ——————————————音乐——————————————————————————
+# ——————————————音乐——————————————————————————
     async def _cmd_music(self,parts,user="",token=""):
         if len(parts)<3: return "用法: /zh music <list|wyy|bili|sort|title>"
         a=parts[2].lower()
