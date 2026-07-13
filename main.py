@@ -236,7 +236,7 @@ def _make_song_list_text(songs):
     return "\n".join(lines)
 
 def _fmt_list():
-    raw = _read("siteConfig.ts") or _fetch_remote_site_config()
+    raw = _fetch_remote_site_config()
     songs = _parse_song_list(raw)
     if not songs:
         return "歌单为空"

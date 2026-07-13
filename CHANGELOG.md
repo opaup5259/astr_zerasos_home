@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.40]
+### Fixed
+- list_music 直接每次都从 GitHub raw 拉取 siteConfig.ts，不再读本地文件
+
 ## [1.0.39]
 ### Fixed
 - list_music 若本地 siteConfig.ts 读不到 songList，自动从 GitHub raw 拉取最新版本
