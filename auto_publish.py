@@ -9,6 +9,7 @@ import inspect
 import logging
 import random
 import re
+import time
 from typing import Optional, Tuple
 
 logger = logging.getLogger("astr_zerasos_home.auto_publish")
@@ -56,6 +57,10 @@ def _match_single(field: str, val: int) -> bool:
 class AutoPublishService:
     """自动发布说说服务 — LLM 生成内容 + 定时调度"""
 
+    # 缓存配置
+    CACHE_TTL = 300  # 缓存有效期（秒），5分钟
+    _cache = {}  # class-level cache: {key: (value, expire_time)}
+
     DEFAULT_PROMPT = (
         "你是一个生活博主，正在运营个人博客。"
         "请根据当前日期和场景，写一条简短的「说说」（类似QQ空间说说/朋友圈/微博）。\n\n"
@@ -79,6 +84,8 @@ class AutoPublishService:
         self._user = ""
         self._token = ""
         self._load_config()
+        # 预热缓存（立即启动，不阻塞 init）
+        asyncio.create_task(self._warm_cache())
 
     def _load_config(self):
         self._enabled = bool(self.config.get("auto_publish_enabled", False))
@@ -94,6 +101,85 @@ class AutoPublishService:
         """设置 GitHub 凭据"""
         self._user = user or ""
         self._token = token or ""
+
+    # ========== 缓存系统 ==========
+
+    @classmethod
+    def _cache_get(cls, key: str) -> tuple:
+        """从缓存获取值，返回 (is_hit, value)"""
+        now = time.time()
+        if key in cls._cache:
+            val, expire = cls._cache[key]
+            if now < expire:
+                return True, val
+            # 过期，删除
+            del cls._cache[key]
+        return False, None
+
+    @classmethod
+    def _cache_set(cls, key: str, value, ttl: int = None):
+        """设置缓存，ttl 秒后过期"""
+        ttl = ttl or cls.CACHE_TTL
+        cls._cache[key] = (value, time.time() + ttl)
+
+    @classmethod
+    def _cache_clear(cls, pattern: str = None):
+        """清除缓存，pattern 为前缀匹配"""
+        if pattern is None:
+            cls._cache.clear()
+        else:
+            cls._cache = {k: v for k, v in cls._cache.items() if not k.startswith(pattern)}
+
+    async def _warm_cache(self):
+        """预热缓存：提前加载人格和知识库"""
+        try:
+            await asyncio.sleep(1)  # 等 provider 初始化
+            logger.info("🔥 开始预热缓存（人格 + 知识库）...")
+            # 预热人格
+            try:
+                if hasattr(self.context, 'persona_manager') and self.context.persona_manager:
+                    persona = await self.context.persona_manager.get_default_persona_v3()
+                    if persona and persona.get('prompt'):
+                        pname = persona.get('name', 'unknown')
+                        ptext = persona['prompt']
+                        if persona.get('begin_dialogs'):
+                            ptext += "\n\n情景预设对话:\n" + "\n".join(persona.get('begin_dialogs', []))
+                        self._cache_set("persona", (pname, ptext))
+                        logger.info(f"✅ 人格缓存预热: {pname}")
+            except Exception as e:
+                logger.warning(f"人格缓存预热失败: {e}")
+
+            # 预热知识库（每种内容类型查询一次）
+            date_ctx = self._get_date_context()
+            kb_queries = {
+                "shuoshuo": f"{date_ctx} 日常 生活 心情 趣事 个人感悟 日常分享",
+                "zatan": f"{date_ctx} 思考 感悟 生活 见闻 随想 闲聊",
+                "blog": f"{date_ctx} 技术 分享 经验 思考 观点 深度 写作",
+            }
+            if hasattr(self.context, 'kb_manager') and self.context.kb_manager:
+                kb_names = ["通用知识库", "助手知识库", "泽拉索斯", "小说正文"]
+                for ctype, query in kb_queries.items():
+                    try:
+                        result = await self.context.kb_manager.retrieve(
+                            query=query,
+                            kb_names=kb_names,
+                            top_k_fusion=10,
+                            top_m_final=3,
+                        )
+                        if result and result.get("results"):
+                            texts = []
+                            for c in result["results"]:
+                                texts.append(f"[{c.get('kb_name','?')}] {c.get('content','')}")
+                            if texts:
+                                ctx = "\n\n以下是与当前主题相关的知识库内容，请参考：\n" + "\n---\n".join(texts)
+                                self._cache_set(f"kb_{ctype}", (ctx, len(texts)))
+                                logger.info(f"✅ KB缓存预热({ctype}): {len(texts)}条")
+                    except Exception as e:
+                        logger.debug(f"KB预热({ctype})跳过: {e}")
+
+            logger.info("🔥 缓存预热完成")
+        except Exception as e:
+            logger.warning(f"缓存预热异常: {e}")
 
     # ========== LLM 生成 ==========
 
@@ -122,57 +208,86 @@ class AutoPublishService:
                     debug_info.append("⚠️ LLM Provider 不可用，使用备用模板")
                 return self._fallback_generate()
 
-            # ====== 人格系统 ======
+            # ====== 人格系统（优先走缓存） ======
             persona_text = ""
             persona_name = ""
-            try:
-                if hasattr(self.context, 'persona_manager') and self.context.persona_manager:
-                    # PersonaManager.get_default_persona_v3() is async, returns Personality dict-like object
-                    persona = await self.context.persona_manager.get_default_persona_v3()
-                    if persona and persona.get('prompt'):
-                        persona_text = persona['prompt']
-                        persona_name = persona.get('name', 'unknown')
-                        persona_used = True
-                        logger.info(f"已加载人格: {persona_name}")
-                        if persona.get('begin_dialogs'):
-                            persona_text += "\n\n情景预设对话:\n" + "\n".join(persona.get('begin_dialogs', []))
-            except Exception as e:
-                logger.warning(f"人格加载失败: {e}")
+            hit, cached = self._cache_get("persona")
+            if hit and cached:
+                persona_name, persona_text = cached
+                persona_used = True
+                logger.info(f"人格缓存命中: {persona_name}")
+            else:
+                try:
+                    if hasattr(self.context, 'persona_manager') and self.context.persona_manager:
+                        persona = await self.context.persona_manager.get_default_persona_v3()
+                        if persona and persona.get('prompt'):
+                            persona_text = persona['prompt']
+                            persona_name = persona.get('name', 'unknown')
+                            persona_used = True
+                            logger.info(f"已加载人格: {persona_name}")
+                            if persona.get('begin_dialogs'):
+                                persona_text += "\n\n情景预设对话:\n" + "\n".join(persona.get('begin_dialogs', []))
+                            self._cache_set("persona", (persona_name, persona_text))
+                except Exception as e:
+                    logger.warning(f"人格加载失败: {e}")
 
+            # 检测是否缓存命中
+            persona_cache_hit, _ = self._cache_get("persona")
             if debug_info is not None:
                 if persona_used:
-                    debug_info.append(f"🧑 人格已加载: {persona_name} ({persona_text[:60]}…)" if len(persona_text) > 60 else f"🧑 人格已加载: {persona_name} ({persona_text})")
+                    prefix = "🧑 [缓存]" if persona_cache_hit else "🧑"
+                    debug_info.append(f"{prefix} 人格已加载: {persona_name} ({persona_text[:60]}…)" if len(persona_text) > 60 else f"{prefix} 人格已加载: {persona_name} ({persona_text})")
                 else:
                     debug_info.append("ℹ️ 人格管理器未启用，使用默认系统提示")
 
-            # ====== 知识库检索 ======
+            # ====== 知识库检索（优先走缓存） ======
             kb_context = ""
             if kb_query and hasattr(self.context, 'kb_manager') and self.context.kb_manager:
-                try:
-                    kb_names = ["通用知识库", "助手知识库", "泽拉索斯", "小说正文"]
-                    result = await self.context.kb_manager.retrieve(
-                        query=kb_query,
-                        kb_names=kb_names,
-                        top_k_fusion=10,
-                        top_m_final=3,
-                    )
-                    # retrieve() returns {"context_text": str, "results": [{chunk_id,doc_id,kb_id,kb_name,doc_name,content,score,...}]}
-                    if result and result.get("results"):
-                        texts = []
-                        for c in result["results"]:
-                            texts.append(f"[{c.get('kb_name','?')}] {c.get('content','')}")
-                        if texts:
-                            kb_context = "\n\n以下是与当前主题相关的知识库内容，请参考：\n" + "\n---\n".join(texts)
-                            kb_used = True
-                            kb_count = len(texts)
-                            # 统计各知识库匹配数
-                            kb_counter = collections.Counter(c.get('kb_name','?') for c in result["results"])
-                            kb_total = sum(kb_counter.values())
-                            logger.info(f"知识库检索到 {kb_count} 条相关内容 (共检索 {kb_total} 个片段)")
-                except Exception as e:
-                    logger.warning(f"知识库检索失败: {e}")
-                    if debug_info is not None:
-                        debug_info.append(f"⚠️ 知识库检索失败: {str(e)[:100]}")
+                # 推断内容类型用于缓存键（从 kb_query 提取特征）
+                cache_key = None
+                if "日常" in kb_query and "趣事" in kb_query:
+                    cache_key = "kb_shuoshuo"
+                elif "思考" in kb_query or "随想" in kb_query:
+                    cache_key = "kb_zatan"
+                elif "技术" in kb_query or "编程" in kb_query:
+                    cache_key = "kb_blog"
+
+                hit = False
+                if cache_key:
+                    hit, cached = self._cache_get(cache_key)
+                    if hit and cached:
+                        kb_context, kb_count = cached
+                        kb_used = True
+                        kb_total = kb_count
+                        logger.info(f"KB缓存命中({cache_key}): {kb_count}条")
+
+                if not hit:
+                    try:
+                        kb_names = ["通用知识库", "助手知识库", "泽拉索斯", "小说正文"]
+                        result = await self.context.kb_manager.retrieve(
+                            query=kb_query,
+                            kb_names=kb_names,
+                            top_k_fusion=10,
+                            top_m_final=3,
+                        )
+                        if result and result.get("results"):
+                            texts = []
+                            for c in result["results"]:
+                                texts.append(f"[{c.get('kb_name','?')}] {c.get('content','')}")
+                            if texts:
+                                kb_context = "\n\n以下是与当前主题相关的知识库内容，请参考：\n" + "\n---\n".join(texts)
+                                kb_used = True
+                                kb_count = len(texts)
+                                kb_counter = collections.Counter(c.get('kb_name','?') for c in result["results"])
+                                kb_total = sum(kb_counter.values())
+                                logger.info(f"知识库检索到 {kb_count} 条相关内容 (共检索 {kb_total} 个片段)")
+                                # 缓存结果
+                                if cache_key:
+                                    self._cache_set(cache_key, (kb_context, kb_count))
+                    except Exception as e:
+                        logger.warning(f"知识库检索失败: {e}")
+                        if debug_info is not None:
+                            debug_info.append(f"⚠️ 知识库检索失败: {str(e)[:100]}")
 
             # ====== 构建 system_prompt ======
             sp = system_prompt or "你是一个有个人特色的生活博主，擅长写简短有趣的「说说」。"
@@ -187,11 +302,8 @@ class AutoPublishService:
 
             if debug_info is not None:
                 if kb_used:
-                    debug_info.append(f"📚 知识库已检索: 匹配到 {kb_count} 条相关内容")
-                    if kb_total > 0:
-                        # 显示各库分布
-                        kb_details = ', '.join(f'{k}:{v}' for k, v in collections.Counter(c.get('kb_name','?') for c in result['results']).items())
-                        debug_info.append(f"📊 知识库命中分布: {kb_details}")
+                    kb_source = "[缓存] " if (cache_key and self._cache_get(cache_key)[0]) else ""
+                    debug_info.append(f"📚 {kb_source}知识库已检索: 匹配到 {kb_count} 条相关内容")
                 else:
                     debug_info.append("ℹ️ 知识库: 未检索到相关内容")
 
