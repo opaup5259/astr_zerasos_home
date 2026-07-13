@@ -193,7 +193,7 @@ class AutoPublishService:
     async def _publish_to_blog(self, title: str, body: str) -> str:
         """调用 main.py 的 new_chatter 发布说说到博客"""
         # 延迟导入避免循环引用
-        from main import new_chatter
+        from .main import new_chatter
         return await new_chatter(title, body, user=self._user, token=self._token)
 
     async def force_run(self) -> str:

@@ -21,7 +21,7 @@ _AUTO_PUBLISHER = None
 def _get_auto_publisher(context, config):
     global _AUTO_PUBLISHER
     if _AUTO_PUBLISHER is None:
-        from auto_publish import AutoPublishService
+        from .auto_publish import AutoPublishService
         _AUTO_PUBLISHER = AutoPublishService(context, config)
     return _AUTO_PUBLISHER
 
@@ -406,7 +406,7 @@ class ZerasosHomePlugin(Star):
         """初始化自动发布服务"""
         try:
             if self._auto_publisher is None:
-                from auto_publish import AutoPublishService
+                from .auto_publish import AutoPublishService
                 self._auto_publisher = AutoPublishService(self.context, self.config)
             else:
                 self._auto_publisher.on_config_update(self.config)
