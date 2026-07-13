@@ -74,8 +74,9 @@ def list_files(rel_dir: str) -> list[str]:
     return []
 
 
-def _run_git(args: list[str], cwd: str) -> str:
-    """执行 git 命令（cwd 用关键字参数传入）"""
+def _run_git(args: list[str], cwd: str = None) -> str:
+    """执行 git 命令，cwd 默认使用 WORK_DIR"""
+    cwd = cwd or WORK_DIR
     cmd = ["git"] + args
     env = os.environ.copy()
     ssh_key = os.path.expanduser("~/.ssh/id_rsa")

@@ -12,7 +12,14 @@ if _PLUGIN_DIR not in sys.path:
     sys.path.insert(0, _PLUGIN_DIR)
 
 import shutil
-shutil.rmtree(os.path.join(_PLUGIN_DIR, "__pycache__"), ignore_errors=True)
+# 清除所有子模块的 pyc 缓存，防止 AstrBot 热重载使用旧编译版本
+for _root, _dirs, _files in os.walk(_PLUGIN_DIR):
+    for _d in _dirs:
+        if _d == "__pycache__":
+            shutil.rmtree(os.path.join(_root, _d), ignore_errors=True)
+    for _f in _files:
+        if _f.endswith(".pyc"):
+            os.remove(os.path.join(_root, _f))
 
 from astrbot.api.all import *
 from astrbot.api.event.filter import EventMessageType
