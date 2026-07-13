@@ -106,12 +106,16 @@ class AutoPublishService:
             f"时间：{now.hour}:{now.minute:02d}"
         )
 
-    async def _call_llm(self, prompt: str, system_prompt: str = None, kb_query: str = "") -> str:
+    async def _call_llm(self, prompt: str, system_prompt: str = None, kb_query: str = "", debug_info: list = None) -> str:
         """调用 AstrBot LLM Provider 生成内容，可选知识库增强"""
+        kb_used = False
+        kb_count = 0
         try:
             provider = self.context.get_using_provider()
             if provider is None:
                 logger.warning("未找到可用的 LLM Provider，使用备用生成")
+                if debug_info is not None:
+                    debug_info.append("⚠️ LLM Provider 不可用，使用备用模板")
                 return self._fallback_generate()
 
             # 知识库检索
@@ -131,13 +135,23 @@ class AutoPublishService:
                             texts.append(f"[{c.get('kb_name','?')}] {c.get('content','')}")
                         if texts:
                             kb_context = "\n\n以下是与当前主题相关的知识库内容，请参考：\n" + "\n---\n".join(texts)
-                            logger.info(f"知识库检索到 {len(texts)} 条相关内容")
+                            kb_used = True
+                            kb_count = len(texts)
+                            logger.info(f"知识库检索到 {kb_count} 条相关内容")
                 except Exception as e:
                     logger.warning(f"知识库检索失败: {e}")
+                    if debug_info is not None:
+                        debug_info.append(f"⚠️ 知识库检索失败: {str(e)[:100]}")
 
             sp = system_prompt or "你是一个有个人特色的生活博主，擅长写简短有趣的「说说」。"
             if kb_context:
                 sp += "\n\n你可以参考以下背景知识来生成内容，但不要直接复制。" + kb_context
+
+            if debug_info is not None:
+                if kb_used:
+                    debug_info.append(f"📚 知识库已检索: 匹配到 {kb_count} 条相关内容")
+                else:
+                    debug_info.append("ℹ️ 知识库: 未检索到相关内容")
 
             result = await provider.text_chat(
                 prompt=prompt,
@@ -150,9 +164,13 @@ class AutoPublishService:
             return str(result)
         except ImportError:
             logger.warning("AstrBot LLM API 不可用，使用备用生成")
+            if debug_info is not None:
+                debug_info.append("⚠️ LLM API 不可用，使用备用模板")
             return self._fallback_generate()
         except Exception as e:
             logger.exception(f"LLM 调用失败: {e}")
+            if debug_info is not None:
+                debug_info.append(f"⚠️ LLM 调用失败: {str(e)[:100]}")
             return self._fallback_generate()
 
     def _fallback_generate(self) -> str:
@@ -250,13 +268,16 @@ class AutoPublishService:
         "blog": "你是一个技术博主，善于将自己的思考和经验写成有价值的文章。文字流畅，有深度。",
     }
 
-    async def generate_chatter(self, content_type: str = "shuoshuo") -> Tuple[str, str]:
+    async def generate_chatter(self, content_type: str = "shuoshuo", debug_info: list = None) -> Tuple[str, str]:
         """生成一条内容（说说/杂谈/博客）"""
         from datetime import datetime
         date_ctx = self._get_date_context()
         prompt_template = self.PROMPTS.get(content_type, self.PROMPTS["shuoshuo"])
         system_prompt = self.SYSTEM_PROMPTS.get(content_type, self.SYSTEM_PROMPTS["shuoshuo"])
         prompt = f"{date_ctx}\n\n{prompt_template}"
+
+        if debug_info is not None:
+            debug_info.append(f"📅 日期上下文: {date_ctx}")
 
         # 天气查询 - 尝试获取天气信息
         weather_info = ""
@@ -281,10 +302,12 @@ class AutoPublishService:
         if weather_info:
             prompt += f"\n\n{weather_info}"
 
-        text = await self._call_llm(prompt, system_prompt=system_prompt, kb_query=kb_query)
+        text = await self._call_llm(prompt, system_prompt=system_prompt, kb_query=kb_query, debug_info=debug_info)
         title, body = self.parse_llm_output(text)
         type_label = {"shuoshuo": "说说", "zatan": "杂谈", "blog": "博客文章"}
         logger.info(f"LLM 生成{type_label.get(content_type, '内容')}: [{title}] ({len(body)}字)")
+        if debug_info is not None:
+            debug_info.append(f"✍️ 已生成: [{title}] ({len(body)}字)")
         return title, body
 
     # ========== 发布逻辑 ==========
@@ -294,26 +317,45 @@ class AutoPublishService:
         from .main import new_chatter, new_blog_post
         if content_type == "blog":
             return await new_blog_post(title, body, user=self._user, token=self._token)
-        return await new_chatter(title, body, user=self._user, token=self._token)
+        return await new_chatter(title, body, user=self._user, token=self._token, chatter_type=content_type)
 
     async def force_run(self, content_type: str = "shuoshuo") -> str:
         """强制运行一次自动发布（用于管理员指令和定时任务）"""
+        type_label = {"shuoshuo": "说说", "zatan": "杂谈", "blog": "博客文章"}
+        label = type_label.get(content_type, "内容")
+        debug_info = []
         try:
-            title, body = await self.generate_chatter(content_type=content_type)
+            # 标记使用的 prompt/persona
+            prompt_template = self.PROMPTS.get(content_type, self.PROMPTS["shuoshuo"])
+            system_prompt = self.SYSTEM_PROMPTS.get(content_type, self.SYSTEM_PROMPTS["shuoshuo"])
+            debug_info.append(f"🤖 角色/人格: {system_prompt[:60]}…" if len(system_prompt) > 60 else f"🤖 角色/人格: {system_prompt}")
+            debug_info.append(f"📝 提示词: {prompt_template[:100]}…" if len(prompt_template) > 100 else f"📝 提示词: {prompt_template}")
+            
+            # 标记知识库查询关键词
+            kb_query_map = {
+                "shuoshuo": "今天 日常 生活 心情 趣事",
+                "zatan": "最近的热门话题 日常 思考 感悟 生活 见闻",
+                "blog": "技术 分享 教程 经验 思考 观点",
+            }
+            kb_q = kb_query_map.get(content_type, "")
+            debug_info.append(f"🔍 知识库检索关键词: {kb_q}")
+            
+            title, body = await self.generate_chatter(content_type=content_type, debug_info=debug_info)
             result = await self._publish_to_blog(title, body, content_type=content_type)
-            type_label = {"shuoshuo": "说说", "zatan": "杂谈", "blog": "博客文章"}
-            label = type_label.get(content_type, "内容")
             log_msg = f"自动{label}发布成功: [{title}]"
             logger.info(log_msg)
             return (
                 f"✅ 自动{label}已发布\n\n"
                 f"📌 {title}\n\n"
                 f"{body[:300]}{'…' if len(body) > 300 else ''}\n\n"
-                f"---\n{result}"
+                f"─── 调试信息 ───\n"
+                + "\n".join(debug_info) + "\n"
+                f"─── 发布结果 ───\n{result}"
             )
         except Exception as e:
             logger.exception(f"自动发布失败 (type={content_type})")
-            return f"❌ 自动发布失败: {str(e)[:200]}"
+            debug_info.append(f"❌ 错误: {str(e)[:100]}")
+            return f"❌ 自动{label}发布失败: {str(e)[:200]}"
 
     # ========== 定时调度 ==========
 

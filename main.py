@@ -375,23 +375,33 @@ def list_chatters():
     result.sort(key=lambda x: x["file"], reverse=True)
     return result
 
-async def new_chatter(title, body, user="", token=""):
+async def new_chatter(title, body, user="", token="", chatter_type="shuoshuo"):
     now = datetime.datetime.now()
     slug = now.strftime("%Y-%m-%d-%H%M%S")
+    
+    # 根据类型设置不同的 frontmatter
+    type_label = "说说" if chatter_type == "shuoshuo" else "杂谈"
+    tags = [type_label]
+    type_field = chatter_type  # "shuoshuo" or "zatan"
+    mood = "日常"
+    
     chatter_content = "---\n"
     chatter_content += f"title: {title}\n"
     date_str = now.strftime("%Y-%m-%d %H:%M:%S")
     chatter_content += f"date: '{date_str}'\n"
-    chatter_content += "tags:\n- 日常\n"
-    chatter_content += "mood: 日常\n"
+    chatter_content += f"type: {type_field}\n"
+    chatter_content += "tags:\n"
+    for tag in tags:
+        chatter_content += f"- {tag}\n"
+    chatter_content += f"mood: {mood}\n"
     chatter_content += "cover: ''\n"
     chatter_content += "description: ''\n"
     chatter_content += "---\n\n"
     chatter_content += body + "\n"
     _write("chatters/" + slug + ".md", chatter_content)
     await ensure_repo(user=user, token=token)
-    await commit_push(["chatters/" + slug + ".md"], "chore: add chatter " + title, user=user, token=token)
-    return f"已发布说说 [{title}]"
+    await commit_push(["chatters/" + slug + ".md"], f"chore: add {type_field} {title}", user=user, token=token)
+    return f"已发布{type_label} [{title}]"
 
 async def del_chatter(filename, user="", token=""):
     if not filename.endswith(".md"):
@@ -651,7 +661,7 @@ class ZerasosHomePlugin(Star):
         if a=="add":
             if len(parts)<4: return "用法: /zh chatters add 标题 | 内容"
             args=" ".join(parts[3:]).split("|"); title=args[0].strip() or "未命名"; body=args[1].strip() if len(args)>1 else "(暂无)"
-            return await new_chatter(title,body,user=user,token=token)
+            return await new_chatter(title,body,user=user,token=token,chatter_type="zatan")
         if a=="del":
             if len(parts)<4: return "用法: /zh chatters del <文件名>"
             return await del_chatter(parts[3],user=user,token=token)
