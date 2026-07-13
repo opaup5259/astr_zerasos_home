@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.34] - 2026-07-13
+### Fixed
+- 修复 list 命令返回"歌单为空"：读操作不应调用 ensure_repo（git pull 覆盖了本地未推送的改动）
+
 ## [1.0.33] - 2026-07-13
 ### Fixed
 - 修复 `from main import` 在 AstrBot 运行时导致 `attempted relative import` 错误

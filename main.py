@@ -216,7 +216,6 @@ def _inject_song_list(raw, songs):
     return raw
 
 async def list_music(user="", token=""):
-    await ensure_repo(user=user, token=token)
     return _fmt_list()
 
 async def add_music(sid, user="", token=""):
