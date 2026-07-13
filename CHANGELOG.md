@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.30] - 2026-07-13
+### 重大重构
+- 歌单统一为 songList 格式，网易云 + B站混合排序
+- 新增 /zh music list 显示统一歌单（含序号）
+- 新增 /zh music wyy add/del [标题] 管理网易云歌曲
+- 新增 /zh music bili add/del [标题] 管理B站歌曲
+- 新增 /zh music sort <序号1> <序号2> 交换排序
+- 新增 /zh music title <序号> <标题> 修改自定义标题
+- B站视频支持自定义标题，添加时可指定
+- 默认使用视频标题，有自定义标题则显示自定义
+- 新增独立模块 music_mgr.py（统一歌单管理逻辑）
+- 帮助命令已更新
+
 ## [1.0.28] - 2026-07-13
 ### Fixed
 - 修复 list_bili_music 正则中多余的反斜杠导致匹配失败
