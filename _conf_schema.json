@@ -23,7 +23,7 @@
     "default": true
   },
   "auto_publish": {
-    "type": "dict",
+    "type": "object",
     "description": "自动发布配置",
     "hint": "定时自动发布说说到博客",
     "default": {

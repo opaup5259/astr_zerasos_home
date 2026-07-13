@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.22] - 2026-07-13
+### Fixed
+- 修复 _conf_schema.json 中 auto_publish 配置类型错误：dict → object（AstrBot 不支持 dict 类型）
+
 ## [1.0.21] - 2026-07-13
 ### Fixed
 - 修复 commit_push 中 os.path.relpath 路径计算错误导致 git add 失败 (#1)
