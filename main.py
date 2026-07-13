@@ -405,6 +405,39 @@ async def del_chatter(filename, user="", token=""):
     return f"已删除说说 {filename}"
 
 
+# ========== 博客文章（blog post）操作 ==========
+async def new_blog_post(title, body, user="", token=""):
+    """发布一篇博客文章到 posts/ 目录"""
+    import datetime, re
+    # 生成英文 slug
+    slug = title.lower()
+    slug = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", slug)
+    slug = slug.strip("-")[:50]
+    if not slug:
+        slug = datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    now = datetime.datetime.now()
+    # 提取 cover（第一张图片）
+    cover_match = re.search(r"!\[.*?\]\((.*?)\)", body)
+    cover = cover_match.group(1) if cover_match else ""
+    # 提取 description（前100字不带图片）
+    desc = re.sub(r"!\[.*?\]\(.*?\)", "", body)
+    desc = desc.strip()[:100].replace("\n", " ")
+    post_content = f"""---
+title: {title}
+date: '{now.strftime("%Y-%m-%d")}'
+tags:
+- 日常
+description: '{desc}'
+cover: '{cover}'
+---
+
+{body}
+"""
+    _write(f"posts/{slug}.md", post_content)
+    await ensure_repo(user=user, token=token)
+    await commit_push([f"posts/{slug}.md"], f"chore: add blog post {title}", user=user, token=token)
+    return f"已发布博客文章 [{title}]"
+
 # ========== 插件主类 ==========
 @register("astr_zerasos_home", "opaup", "Zerasos-Home 博客管理 - GitHub + Vercel 一键管理", "1.0.12")
 class ZerasosHomePlugin(Star):
@@ -467,7 +500,7 @@ class ZerasosHomePlugin(Star):
             if not self._is_admin(event): yield event.plain_result(self._br("你没有权限")); return
             if not self._enabled: yield event.plain_result(self._br("插件已禁用")); return
         if subcmd=="help":
-            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list            查看全部歌单（含序号）<br/>  /zh music wyy add <ID> [标题]  添加网易云歌曲<br/>  /zh music wyy del <ID或序号>  删除<br/>  /zh music bili add <BV号> [标题]  添加B站视频<br/>  /zh music bili del <BV号或序号>  删除<br/>  /zh music sort <序号1> <序号2>  交换排序<br/>  /zh music title <序号> <标题>  修改标题<br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish - 强制运行一次自动发布说说<br/>  /zh ai status - 查看自动发布状态<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
+            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list            查看全部歌单（含序号）<br/>  /zh music wyy add <ID> [标题]  添加网易云歌曲<br/>  /zh music wyy del <ID或序号>  删除<br/>  /zh music bili add <BV号> [标题]  添加B站视频<br/>  /zh music bili del <BV号或序号>  删除<br/>  /zh music sort <序号1> <序号2>  交换排序<br/>  /zh music title <序号> <标题>  修改标题<br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish [shuoshuo|zatan|blog] - 发布说说/杂谈/博客文章<br/>  /zh ai status - 查看自动发布状态<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
             return
         try:
             user=self._github_user; token=self._github_token
@@ -650,14 +683,18 @@ class ZerasosHomePlugin(Star):
 
     async def _cmd_ai(self,parts,user="",token=""):
         """AI 相关指令"""
-        if len(parts)<3: return "用法: /zh ai <publish|status>"
+        type_map = {"shuoshuo": "shuoshuo", "zatan": "zatan", "blog": "blog",
+                     "说说": "shuoshuo", "杂谈": "zatan", "博客": "blog"}
+        if len(parts)<3: return "用法: /zh ai <publish|status>\n  publish shuoshuo|zatan|blog - 发布说说/杂谈/博客"
         a=parts[2].lower()
         if a=="publish":
-            # 强制运行一次自动发布
             if self._auto_publisher is None:
                 return "自动发布服务未初始化"
             self._auto_publisher.set_credentials(user, token)
-            return await self._auto_publisher.force_run()
+            ct = "shuoshuo"
+            if len(parts)>=4:
+                ct = type_map.get(parts[3].lower(), "shuoshuo")
+            return await self._auto_publisher.force_run(content_type=ct)
         if a=="status":
             if self._auto_publisher is None:
                 return "自动发布服务未初始化"
@@ -666,7 +703,7 @@ class ZerasosHomePlugin(Star):
             status_info.append(f"Cron: {self._auto_publisher._cron}")
             status_info.append(f"调度器运行中: {'✅' if (self._auto_publisher._task and not self._auto_publisher._task.done()) else '❌'}")
             return "\n".join(status_info)
-        return "用法: /zh ai <publish|status>"
+        return "用法: /zh ai <publish|status>\n  publish shuoshuo|zatan|blog - 发布说说/杂谈/博客"
 
     async def _cmd_config(self,parts):
         """查看配置"""
