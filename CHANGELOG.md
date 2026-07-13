@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.28] - 2026-07-13
+### Fixed
+- 修复 list_bili_music 正则中多余的反斜杠导致匹配失败
+
 ## [1.0.27] - 2026-07-13
 ### 新增
 - B站音源支持：/zh music bili add/del <BV号>

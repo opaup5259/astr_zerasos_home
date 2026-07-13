@@ -157,7 +157,7 @@ def list_music():
     c=_read("siteConfig.ts"); m=re.search(r"cloudMusicIds:\s*\[([^\]]*)\]",c)
     return re.findall(r'"([^"]+)"',m.group(1)) if m else []
 def list_bili_music():
-    c=_read("siteConfig.ts"); m=re.search(r"bilibiliIds:\s*\[([^\]]*)\\]",c)
+    c=_read("siteConfig.ts"); m=re.search(r"bilibiliIds:\s*\[([^\]]*)\]",c)
     return re.findall(r'"([^"]+)"',m.group(1)) if m else []
 async def add_music(sid, user="", token=""):
     c=_read("siteConfig.ts")
