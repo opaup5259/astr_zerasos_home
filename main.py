@@ -33,7 +33,7 @@ logger = logging.getLogger("astr_zerasos_home")
 @register("astr_zerasos_home", "opaup", "Zerasos-Home 博客管理", "1.0.0")
 class ZerasosHomePlugin(Star):
 
-    def __init__(self, context: Context, config: dict):
+    def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.config = config or {}
         self.admin_ids = set()
