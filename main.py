@@ -57,15 +57,17 @@ async def _git(args, cwd=None, user="", token=""):
 
 async def ensure_repo(user="", token=""):
     url = _repo_url(user, token) if user and token else _repo_url()
+    # pull/clone 走 gh-proxy 加速（国内服务器友好）
+    proxy_cfg = ["-c", "url.https://gh-proxy.com/https://github.com/.insteadOf=https://github.com/"]
     if os.path.isdir(os.path.join(_WORK_DIR, ".git")):
         await _git(["remote", "set-url", "origin", url], user=user, token=token)
-        await _git(["pull", "origin", _REPO_BRANCH], user=user, token=token)
+        await _git(proxy_cfg + ["pull", "origin", _REPO_BRANCH], user=user, token=token)
     else:
         if os.path.isdir(_WORK_DIR):
             shutil.rmtree(_WORK_DIR, ignore_errors=True)
         parent = os.path.dirname(_WORK_DIR)
         os.makedirs(parent, exist_ok=True)
-        await _git(["clone", url, _WORK_DIR], cwd=parent, user=user, token=token)
+        await _git(proxy_cfg + ["clone", url, _WORK_DIR], cwd=parent, user=user, token=token)
 
 async def commit_push(files, msg, user="", token=""):
     await ensure_repo(user=user, token=token)
