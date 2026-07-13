@@ -23,9 +23,22 @@ logger = logging.getLogger("astr_zerasos_home")
 
 # ========== Git 异步操作 ==========
 
-_REPO_URL = "https://opaup5259:***@github.com/opaup5259/Zerasos-Home.git"
 _REPO_BRANCH = "main"
 _WORK_DIR = os.path.join(tempfile.gettempdir(), "zerasos-home-repo")
+
+# 以下变量在插件 __init__ 时从 config 加载
+_GITHUB_USER = ""
+_GITHUB_TOKEN = ""
+_REPO_FULL = "opaup5259/Zerasos-Home"
+
+
+def _repo_url():
+    """从配置构建带认证的仓库 URL"""
+    u = _GITHUB_USER
+    p = _GITHUB_TOKEN
+    if u and p:
+        return f"https://{u}:{p}@github.com/{_REPO_FULL}.git"
+    return f"https://github.com/{_REPO_FULL}.git"
 
 
 async def _git(args, cwd=None):
@@ -46,14 +59,17 @@ async def _git(args, cwd=None):
 
 
 async def ensure_repo():
+    url = _repo_url()
     if os.path.isdir(os.path.join(_WORK_DIR, ".git")):
+        # 更换 remote 的 URL（兼容 token 变更的情况）
+        await _git(["remote", "set-url", "origin", url])
         await _git(["pull", "origin", _REPO_BRANCH])
     else:
         if os.path.isdir(_WORK_DIR):
             shutil.rmtree(_WORK_DIR, ignore_errors=True)
         parent = os.path.dirname(_WORK_DIR)
         os.makedirs(parent, exist_ok=True)
-        await _git(["clone", _REPO_URL, _WORK_DIR], cwd=parent)
+        await _git(["clone", url, _WORK_DIR], cwd=parent)
 
 
 async def commit_push(files, msg):
