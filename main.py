@@ -28,7 +28,7 @@ logger = logging.getLogger("astr_zerasos_home")
 
 # ========== Git 操作 ==========
 
-_REPO_URL = "git@github.com:opaup5259/Zerasos-Home.git"
+_REPO_URL = "https://opaup5259:ghp_Yj…KLyU@github.com/opaup5259/Zerasos-Home.git"
 _REPO_BRANCH = "main"
 _WORK_DIR = os.path.join(tempfile.gettempdir(), "zerasos-home-repo")
 
@@ -36,7 +36,6 @@ _WORK_DIR = os.path.join(tempfile.gettempdir(), "zerasos-home-repo")
 def _git(args, cwd=None):
     cwd = cwd or _WORK_DIR
     env = os.environ.copy()
-    env.setdefault("GIT_SSH_COMMAND", "ssh -o StrictHostKeyChecking=no")
     r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=60, env=env)
     if r.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失败: {r.stderr[:200]}")
