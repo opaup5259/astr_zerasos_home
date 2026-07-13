@@ -423,7 +423,7 @@ class ZerasosHomePlugin(Star):
 
     async def _cmd_projects(self,parts,user="",token=""):
         if len(parts)<3: return "用法: /zh projects <list|add|del|edit>"
-        await ensure_repo(user=user,token=token); a=parts[2].lower()
+        a=parts[2].lower()
         if a=="list":
             ps=list_projects()
             return "暂无项目" if not ps else "项目列表:\n"+"\n".join(f"[{p.get('id','?')[:8]}...] {p.get('name','?')}" for p in ps)
@@ -441,7 +441,7 @@ class ZerasosHomePlugin(Star):
 
     async def _cmd_albums(self,parts,user="",token=""):
         if len(parts)<3: return "用法: /zh albums <list|add|del>"
-        await ensure_repo(user=user,token=token); a=parts[2].lower()
+        a=parts[2].lower()
         if a=="list":
             als=list_albums()
             return "暂无相册" if not als else "相册列表:\n"+"\n".join(f"[{al.get('id','?')[:20]}...] {al.get('title','?')} ({len(al.get('photos',[]))}张)" for al in als)
@@ -456,14 +456,13 @@ class ZerasosHomePlugin(Star):
 
     async def _cmd_photos(self,parts,user="",token=""):
         if len(parts)<4 or parts[2].lower()!="add": return "用法: /zh photos add <album_id>|图URL|描述"
-        await ensure_repo(user=user,token=token)
         args=" ".join(parts[3:]).split("|")
         if len(args)<2: return "请提供 album_id 和 URL"
         return await add_photo(args[0].strip(),args[1].strip(),args[2].strip() if len(args)>2 else "",user=user,token=token)
 
     async def _cmd_music(self,parts,user="",token=""):
         if len(parts)<3: return "用法: /zh music <list|wyy|bili|sort|title>"
-        await ensure_repo(user=user,token=token); a=parts[2].lower()
+        a=parts[2].lower()
         if a=="list":
             return await list_music(user=user,token=token)
         if a in("wyy","163","netease"):
@@ -536,7 +535,7 @@ class ZerasosHomePlugin(Star):
 
     async def _cmd_chatters(self,parts,user="",token=""):
         if len(parts)<3: return "用法: /zh chatters <list|add|del>"
-        await ensure_repo(user=user,token=token); a=parts[2].lower()
+        a=parts[2].lower()
         if a=="list":
             items=list_chatters(); return "暂无说说" if not items else "说说:\n"+"\n".join(f"  {i['file']} - {i['title']}" for i in items[:20])
         if a=="add":
@@ -549,7 +548,7 @@ class ZerasosHomePlugin(Star):
 
     async def _cmd_moments(self,parts,user="",token=""):
         if len(parts)<3: return "用法: /zh moments <list|add|del>"
-        await ensure_repo(user=user,token=token); a=parts[2].lower()
+        a=parts[2].lower()
         if a=="list":
             items=list_moments(); return "暂无动态" if not items else "动态:\n"+"\n".join(f"  {i['id']}" for i in items[:20])
         if a=="add":
@@ -565,7 +564,6 @@ class ZerasosHomePlugin(Star):
             return await del_moment(parts[3],user=user,token=token)
 
     async def _cmd_about(self,parts,user="",token=""):
-        await ensure_repo(user=user,token=token)
         if len(parts)>=3 and parts[2].lower()=="edit":
             if len(parts)<4: return "用法: /zh about edit 标题 | 内容"
             args=" ".join(parts[3:]).split("|"); title=args[0].strip() or "关于我"; body=args[1].strip() if len(args)>1 else ""

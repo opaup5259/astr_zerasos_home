@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.38] - 2026-07-13
+### Fixed
+- 读操作（list）不再调用 ensure_repo，避免 git pull 覆盖本地改动导致歌单为空
+
 ## [1.0.37] - 2026-07-13
 ### Changed
 - ensure_repo 多代理保底：gh-proxy.com → gh.dpik.top → hk.gh-proxy.com → edgeone.gh-proxy.com → 直连
