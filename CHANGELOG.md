@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.0.41]
+### Fixed
+- list_music 从已部署的 Vercel 网站 JS bundle 提取 cloudMusicIds + bilibiliIds，不再依赖 GitHub 仓库
+
+## [1.0.40]
+### Fixed
+- list_music 直接每次都从 GitHub raw 拉取 siteConfig.ts，不再读本地文件
+
+## [1.0.39]
+### Fixed
+- list_music 若本地 siteConfig.ts 读不到 songList，自动从 GitHub raw 拉取最新版本
+
+## [1.0.38] - 2026-07-13
+### Fixed
+- 读操作（list）不再调用 ensure_repo，避免 git pull 覆盖本地改动导致歌单为空
+
+## [1.0.37] - 2026-07-13
+### Changed
+- ensure_repo 多代理保底：gh-proxy.com → gh.dpik.top → hk.gh-proxy.com → edgeone.gh-proxy.com → 直连
+- 每个代理依次尝试，失败自动切换下一个
+
+## [1.0.36] - 2026-07-13
+### Fixed
+- 移除 ensure_repo 中的 git pull（国内服务器网络不稳），clone 改用 --depth 1
+
+## [1.0.35] - 2026-07-13
+### Fixed
+- pull/clone 走 gh-proxy.com 代理，解决国内服务器 GnuTLS 连接失败
+
+## [1.0.34] - 2026-07-13
+### Fixed
+- 修复 list 命令返回"歌单为空"：读操作不应调用 ensure_repo（git pull 覆盖了本地未推送的改动）
+
+## [1.0.33] - 2026-07-13
+### Fixed
+- 修复 `from main import` 在 AstrBot 运行时导致 `attempted relative import` 错误
+
+## [1.0.32] - 2026-07-13
+### Fixed
+- 移除 music_mgr.py 外部导入，内联到 main.py（解决服务器上没有该文件的问题）
+
+## [1.0.31] - 2026-07-13
+### Fixed
+- 修复 list 命令返回 coroutine object（缺少 await）
+
 ## [1.0.30] - 2026-07-13
 ### 重大重构
 - 歌单统一为 songList 格式，网易云 + B站混合排序
