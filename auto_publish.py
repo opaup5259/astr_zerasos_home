@@ -139,11 +139,10 @@ class AutoPublishService:
             if kb_context:
                 sp += "\n\n你可以参考以下背景知识来生成内容，但不要直接复制。" + kb_context
 
-            messages = [
-                {"role": "system", "content": sp},
-                {"role": "user", "content": prompt},
-            ]
-            result = await provider.text_chat(messages)
+            result = await provider.text_chat(
+                prompt=prompt,
+                system_prompt=sp,
+            )
             if hasattr(result, "text"):
                 return result.text
             if isinstance(result, str):
@@ -259,13 +258,28 @@ class AutoPublishService:
         system_prompt = self.SYSTEM_PROMPTS.get(content_type, self.SYSTEM_PROMPTS["shuoshuo"])
         prompt = f"{date_ctx}\n\n{prompt_template}"
 
+        # 天气查询 - 尝试获取天气信息
+        weather_info = ""
+        try:
+            import urllib.request, json as _json
+            w_req = urllib.request.urlopen("https://wttr.in/?format=%C|%t|%h|%w", timeout=5)
+            w_raw = w_req.read().decode("utf-8").strip()
+            w_parts = w_raw.split("|")
+            if len(w_parts) >= 2:
+                weather_info = f"\n当前天气：{w_parts[0]}，温度{w_parts[1]}"
+        except:
+            pass
+
         # 根据类型构建知识库查询关键词
         kb_query_map = {
-            "shuoshuo": "今天 日常 生活 心情 趣事",
-            "zatan": "日常 思考 感悟 生活 见闻",
+            "shuoshuo": f"今天{weather_info} 日常 生活 心情 趣事",
+            "zatan": f"最近的热门话题 日常 思考 感悟 生活 见闻",
             "blog": "技术 分享 教程 经验 思考 观点",
         }
         kb_query = kb_query_map.get(content_type, "")
+        # 将天气信息拼进 prompt
+        if weather_info:
+            prompt += f"\n\n{weather_info}"
 
         text = await self._call_llm(prompt, system_prompt=system_prompt, kb_query=kb_query)
         title, body = self.parse_llm_output(text)
