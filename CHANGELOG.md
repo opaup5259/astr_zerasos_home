@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.23] - 2026-07-13
+### Fixed
+- 修复 _conf_schema.json 中 admin_ids 缺少 items 字段导致 AstrBot 加载失败（KeyError: 'items'）
+
 ## [1.0.22] - 2026-07-13
 ### Fixed
 - 修复 _conf_schema.json 中 auto_publish 配置类型错误：dict → object（AstrBot 不支持 dict 类型）

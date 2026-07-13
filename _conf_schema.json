@@ -15,7 +15,10 @@
     "type": "list",
     "description": "管理员 ID 列表（QQ号）",
     "hint": "一行一个",
-    "default": ["525915186"]
+    "default": ["525915186"],
+    "items": {
+      "type": "string"
+    }
   },
   "enabled": {
     "type": "bool",
@@ -26,11 +29,6 @@
     "type": "object",
     "description": "自动发布配置",
     "hint": "定时自动发布说说到博客",
-    "default": {
-      "enabled": false,
-      "cron": "30 8 * * *",
-      "llm_prompt": ""
-    },
     "sub": {
       "enabled": {
         "type": "bool",
