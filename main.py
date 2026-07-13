@@ -73,7 +73,10 @@ async def commit_push(files, msg, user="", token=""):
         await _git(["add", f], user=user, token=token)
     await _git(["-c", "user.name=opaup5259", "-c", "user.email=opaup5259@gmail.com",
               "commit", "-m", msg], user=user, token=token)
-    await _git(["push", "origin", _REPO_BRANCH], user=user, token=token)
+    # 直推 + 临时禁用 url.insteadOf 避免 gh-proxy 拦截 push
+    push_url = _repo_url(user, token) if user and token else _repo_url()
+    await _git(["-c", "url.https://github.com/.insteadOf=",
+              "push", push_url, f"HEAD:{_REPO_BRANCH}"], user=user, token=token)
 
 # ========== 文件 ==========
 def _read(rel):

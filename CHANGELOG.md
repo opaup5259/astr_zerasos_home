@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.26] - 2026-07-13
+### Fixed
+- 修复 git push 因服务器 gh-proxy url.insteadOf 配置导致推送被吞的问题
+- push 时使用完整 URL + HEAD:main 直推 + 临时禁用 url.insteadOf
+
 ## [1.0.25] - 2026-07-13
 ### Fixed
 - 修复 git commit 因服务器缺少 user.name/user.email 配置而失败
