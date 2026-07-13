@@ -380,7 +380,8 @@ async def new_chatter(title, body, user="", token=""):
     slug = now.strftime("%Y-%m-%d-%H%M%S")
     chatter_content = "---\n"
     chatter_content += f"title: {title}\n"
-    chatter_content += f"date: '{now.strftime(\"%Y-%m-%d %H:%M:%S\")}'\n"
+    date_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    chatter_content += f"date: '{date_str}'\n"
     chatter_content += "tags:\n- 日常\n"
     chatter_content += "mood: 日常\n"
     chatter_content += "cover: ''\n"
