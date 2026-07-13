@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.31] - 2026-07-13
+### Fixed
+- 修复 list 命令返回 coroutine object（缺少 await）
+
 ## [1.0.30] - 2026-07-13
 ### 重大重构
 - 歌单统一为 songList 格式，网易云 + B站混合排序

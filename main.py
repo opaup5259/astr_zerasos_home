@@ -366,7 +366,7 @@ class ZerasosHomePlugin(Star):
         if len(parts)<3: return "用法: /zh music <list|wyy|bili|sort|title>"
         await ensure_repo(user=user,token=token); a=parts[2].lower()
         if a=="list":
-            return list_music(user=user,token=token)
+            return await list_music(user=user,token=token)
         if a in("wyy","163","netease"):
             return await self._cmd_music_wyy(parts,user,token)
         if a=="bili":
