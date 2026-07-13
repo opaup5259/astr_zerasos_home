@@ -83,6 +83,15 @@ class AutoPublishService:
         self._prompt = self.DEFAULT_PROMPT
         self._user = ""
         self._token = ""
+        # 每日计划配置
+        self._daily_plan_enabled = False
+        self._daily_plan_cron = "0 6 * * *"
+        self._shuoshuo_probability = 30  # 百分比 0-100
+        self._zatan_probability = 10     # 百分比 0-100
+        self._max_shuoshuo_per_day = 8
+        self._min_shuoshuo_interval_hours = 2
+        self._pending_tasks = set()  # 已排期的发布任务
+        self._last_plan_date = None  # 当天已执行过计划的日期
         self._load_config()
         # 预热缓存（立即启动，不阻塞 init）
         asyncio.create_task(self._warm_cache())
@@ -92,6 +101,13 @@ class AutoPublishService:
         self._cron = str(self.config.get("auto_publish_cron", "30 8 * * *")).strip()
         prompt = str(self.config.get("auto_publish_llm_prompt", "")).strip()
         self._prompt = prompt or self.DEFAULT_PROMPT
+        # 每日计划
+        self._daily_plan_enabled = bool(self.config.get("daily_plan_enabled", False))
+        self._daily_plan_cron = str(self.config.get("daily_plan_cron", "0 6 * * *")).strip()
+        self._shuoshuo_probability = max(0, min(100, int(self.config.get("shuoshuo_probability", 30))))
+        self._zatan_probability = max(0, min(100, int(self.config.get("zatan_probability", 10))))
+        self._max_shuoshuo_per_day = max(1, min(8, int(self.config.get("max_shuoshuo_per_day", 8))))
+        self._min_shuoshuo_interval_hours = max(1, int(self.config.get("min_shuoshuo_interval_hours", 2)))
 
     def on_config_update(self, config: dict):
         self.config = config or {}
@@ -541,40 +557,136 @@ class AutoPublishService:
             debug_info.append(f"❌ 错误: {str(e)[:100]}")
             return f"❌ 自动{label}发布失败: {str(e)[:200]}"
 
+    # ========== 每日计划 ==========
+
+    def _pick_times(self, count: int, min_interval: int) -> list[int]:
+        """生成 count 个时间点（小时），间隔 >= min_interval 小时"""
+        if count <= 0:
+            return []
+        hours = list(range(8, 23))  # 早 8 点到晚 10 点
+        # 如果间隔要求导致放不下 count 个点，减少 count
+        max_possible = 1 + (len(hours) - 1) // min_interval
+        if count > max_possible:
+            count = max_possible
+        selected = []
+        attempts = 0
+        while len(selected) < count and attempts < 200:
+            h = random.choice(hours)
+            if all(abs(h - s) >= min_interval for s in selected):
+                selected.append(h)
+            attempts += 1
+        return sorted(selected)
+
+    async def _delayed_publish(self, delay: float, content_type: str, target_str: str):
+        """延迟 delay 秒后发布内容"""
+        try:
+            await asyncio.sleep(delay)
+            logger.info(f"⏰ 定时发布触发: {content_type} (预定 {target_str})")
+            result = await self.force_run(content_type=content_type)
+            logger.info(f"定时发布结果: {result[:120]}…" if len(result) > 120 else f"定时发布结果: {result}")
+        except asyncio.CancelledError:
+            logger.info(f"定时发布已取消: {content_type} @ {target_str}")
+        except Exception as e:
+            logger.error(f"定时发布失败 ({content_type} @ {target_str}): {e}")
+
+    async def _run_daily_plan(self):
+        """执行每日计划：决定当天发布内容并排期"""
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        if self._last_plan_date == today:
+            return
+        self._last_plan_date = today
+
+        logger.info(f"📋 开始执行每日计划 ({today})")
+        scheduled = []
+
+        # ----- 说说 -----
+        if random.randint(1, 100) <= self._shuoshuo_probability:
+            max_n = min(self._max_shuoshuo_per_day, 6)
+            weights = [5, 3, 1, 1, 1, 1][:max_n]  # 越少概率越高
+            count = random.choices(range(1, max_n + 1), weights=weights, k=1)[0]
+            times = self._pick_times(count, self._min_shuoshuo_interval_hours)
+            for h in times:
+                scheduled.append(("shuoshuo", h))
+                logger.info(f"   📝 说说 ×1 → {h:02d}:00")
+        else:
+            logger.info("   ❌ 说说: 今日未命中")
+
+        # ----- 杂谈 -----
+        if random.randint(1, 100) <= self._zatan_probability:
+            h = random.randint(10, 21)
+            scheduled.append(("zatan", h))
+            logger.info(f"   📝 杂谈 ×1 → {h:02d}:00")
+        else:
+            logger.info("   ❌ 杂谈: 今日未命中")
+
+        if not scheduled:
+            logger.info("   📭 今日无任何发布计划")
+            return
+
+        now = datetime.datetime.now()
+        for content_type, hour in scheduled:
+            target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            if target <= now:
+                target += datetime.timedelta(days=1)
+            delay = (target - now).total_seconds()
+            target_str = target.strftime("%H:%M")
+            task = asyncio.create_task(
+                self._delayed_publish(delay, content_type, target_str)
+            )
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
+            logger.info(f"   ✅ 已排期: {content_type} @ {target_str} (剩 {int(delay//60)} 分钟)")
+
+        logger.info(f"📋 每日计划完成: {len(scheduled)} 篇已排期")
+
     # ========== 定时调度 ==========
+
+    def _cancel_pending_tasks(self):
+        for t in list(self._pending_tasks):
+            t.cancel()
+        self._pending_tasks.clear()
 
     def start_scheduler(self, user: str = "", token: str = ""):
         """启动后台定时调度器"""
         self._user = user or self._user
         self._token = token or self._token
-        # 取消已有任务
         self.stop_scheduler()
+        self._cancel_pending_tasks()
         if not self._enabled or not self._cron:
             logger.info("自动发布调度器未启动（已禁用或 cron 为空）")
             return
         self._task = asyncio.create_task(self._scheduler_loop())
-        logger.info(f"🚀 自动发布调度器已启动 (cron: {self._cron})")
+        mode = "每日计划" if self._daily_plan_enabled else "单次定时"
+        logger.info(f"🚀 自动发布调度器已启动 (模式: {mode}, 计划时间: {self._daily_plan_cron})")
 
     def stop_scheduler(self):
         """停止调度器"""
         if self._task and not self._task.done():
             self._task.cancel()
             self._task = None
-            logger.info("自动发布调度器已停止")
+        self._cancel_pending_tasks()
+        logger.info("自动发布调度器已停止")
 
     async def _scheduler_loop(self):
-        """后台循环，每分钟检查 cron 表达式"""
+        """后台循环，每30秒检查 cron 表达式"""
         while True:
             try:
                 now = datetime.datetime.now()
-                if _match_cron(self._cron, now):
+
+                if self._daily_plan_enabled and self._daily_plan_cron:
+                    if _match_cron(self._daily_plan_cron, now):
+                        await self._run_daily_plan()
+                        await asyncio.sleep(62)
+                        continue
+
+                if not self._daily_plan_enabled and _match_cron(self._cron, now):
                     logger.info(f"⏰ 定时触发自动发布 (cron: {self._cron})")
                     result = await self.force_run()
                     logger.info(f"定时发布结果: {result[:100]}")
-                    # 休眠避免同一分钟内重复触发
                     await asyncio.sleep(62)
-                else:
-                    await asyncio.sleep(30)
+                    continue
+
+                await asyncio.sleep(30)
             except asyncio.CancelledError:
                 logger.info("调度器被取消")
                 break

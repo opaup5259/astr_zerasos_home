@@ -558,7 +558,7 @@ class ZerasosHomePlugin(Star):
             if not self._is_admin(event): yield event.plain_result(self._br("你没有权限")); return
             if not self._enabled: yield event.plain_result(self._br("插件已禁用")); return
         if subcmd=="help":
-            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list            查看全部歌单（含序号）<br/>  /zh music wyy add <ID> [标题]  添加网易云歌曲<br/>  /zh music wyy del <ID或序号>  删除<br/>  /zh music bili add <BV号> [标题]  添加B站视频<br/>  /zh music bili del <BV号或序号>  删除<br/>  /zh music sort <序号1> <序号2>  交换排序<br/>  /zh music title <序号> <标题>  修改标题<br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish [shuoshuo|zatan|blog] - 发布说说/杂谈/博客文章<br/>  /zh ai status - 查看自动发布状态<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
+            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list            查看全部歌单<br/>  /zh music wyy add <ID> [标题]  添加网易云<br/>  /zh music wyy del <ID或序号>  删除<br/>  /zh music bili add <BV号> [标题]  添加B站<br/>  /zh music bili del <BV号或序号>  删除<br/>  /zh music sort <序号1> <序号2>  交换排序<br/>  /zh music title <序号> <标题>  修改标题<br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish [shuoshuo|zatan|blog] - 手动发布<br/>  /zh ai status - 查看状态和今日排期<br/>  /zh ai plan - 手动触发今日计划<br/>  /zh config auto_publish - 查看详细配置<br/><br/>修改后自动提交 GitHub"))
             return
         try:
             user=self._github_user; token=self._github_token
@@ -756,12 +756,29 @@ class ZerasosHomePlugin(Star):
         if a=="status":
             if self._auto_publisher is None:
                 return "自动发布服务未初始化"
-            status_info = []
-            status_info.append(f"启用: {'✅' if self._auto_publisher._enabled else '❌'}")
-            status_info.append(f"Cron: {self._auto_publisher._cron}")
-            status_info.append(f"调度器运行中: {'✅' if (self._auto_publisher._task and not self._auto_publisher._task.done()) else '❌'}")
-            return "\n".join(status_info)
-        return "用法: /zh ai <publish|status>\n  publish shuoshuo|zatan|blog - 发布说说/杂谈/博客"
+            ap = self._auto_publisher
+            lines = []
+            lines.append(f"\u200b启用: {'\u2705' if ap._enabled else '\u274c'}")
+            lines.append(f"\u200b每日计划: {'\u2705' if ap._daily_plan_enabled else '\u274c'}")
+            lines.append(f"  计划时间: {ap._daily_plan_cron}")
+            lines.append(f"  说说概率: {ap._shuoshuo_probability}%")
+            lines.append(f"  杂谈概率: {ap._zatan_probability}%")
+            lines.append(f"  最多说说/天: {ap._max_shuoshuo_per_day} (间隔>= {ap._min_shuoshuo_interval_hours}h)")
+            import datetime as _dt
+            today_str = _dt.datetime.now().strftime("%Y-%m-%d")
+            lines.append(f"  今日已执行计划: {'\u2705' if ap._last_plan_date == today_str else '\u274c'}")
+            lines.append(f"  待执行发布: {len(ap._pending_tasks)} 条")
+            lines.append(f"\u200b调度器: {'\u2705 运行中' if (ap._task and not ap._task.done()) else '\u274c 已停止'}")
+            return "\n".join(lines)
+        if a=="plan":
+            if self._auto_publisher is None:
+                return "自动发布服务未初始化"
+            import datetime as _dt2
+            ap = self._auto_publisher
+            ap._last_plan_date = None
+            await ap._run_daily_plan()
+            return f"\u2705 每日计划已执行\n今日排期: {len(ap._pending_tasks)} 条发布任务"
+        return "用法: /zh ai <publish|status|plan>\n  publish shuoshuo|zatan|blog - 发布说说/杂谈/博客\n  status - 查看发布状态\n  plan - 手动触发当日计划"
 
     async def _cmd_config(self,parts):
         """查看配置"""
@@ -770,8 +787,14 @@ class ZerasosHomePlugin(Star):
         if a=="auto_publish":
             lines=["=== 自动发布配置 ==="]
             lines.append(f"  启用: {self.config.get('auto_publish_enabled',False)}")
-            lines.append(f"  Cron: {self.config.get('auto_publish_cron','30 8 * * *')}")
+            lines.append(f"  传统Cron: {self.config.get('auto_publish_cron','30 8 * * *')}")
             prompt=self.config.get('auto_publish_llm_prompt','')
             lines.append(f"  自定义Prompt: {'有' if prompt else '无（使用默认）'}")
+            lines.append(f"  每日计划: {'启用' if self.config.get('daily_plan_enabled',False) else '禁用'}")
+            lines.append(f"  计划时间: {self.config.get('daily_plan_cron','0 6 * * *')}")
+            lines.append(f"  说说概率: {self.config.get('shuoshuo_probability',30)}%")
+            lines.append(f"  杂谈概率: {self.config.get('zatan_probability',10)}%")
+            lines.append(f"  最多说说/天: {self.config.get('max_shuoshuo_per_day',8)}")
+            lines.append(f"  间隔: {self.config.get('min_shuoshuo_interval_hours',2)}h")
             return "\n".join(lines)
         return f"未知配置字段: {a}"
