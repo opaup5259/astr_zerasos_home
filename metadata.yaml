@@ -1,0 +1,8 @@
+name: astr_zerasos_home
+desc: Zerasos-Home 博客管理系统 - GitHub + Vercel 一键管理
+help: "/zh help 查看全部指令"
+version: "1.0.0"
+author: "opaup"
+repo: "https://github.com/opaup5259/astr_zerasos_home.git"
+
+enabled: true
