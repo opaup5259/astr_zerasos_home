@@ -14,15 +14,13 @@ WORK_DIR = os.path.join(tempfile.gettempdir(), "zerasos-home-repo")
 def ensure_repo() -> str:
     """确保本地仓库存在，返回工作目录路径"""
     if os.path.isdir(os.path.join(WORK_DIR, ".git")):
-        # 拉取最新
-        _run_git(["pull", "origin", REPO_BRANCH], WORK_DIR)
+        _run_git(["pull", "origin", REPO_BRANCH], cwd=WORK_DIR)
     else:
-        # 清理残留
         if os.path.isdir(WORK_DIR):
             shutil.rmtree(WORK_DIR, ignore_errors=True)
-        os.makedirs(WORK_DIR, exist_ok=True)
         parent = os.path.dirname(WORK_DIR)
-        _run_git(["clone", REPO_URL, WORK_DIR], parent)
+        os.makedirs(parent, exist_ok=True)
+        _run_git(["clone", REPO_URL, WORK_DIR], cwd=parent)
     return WORK_DIR
 
 
@@ -33,13 +31,13 @@ def commit_and_push(files: list[str], message: str) -> str:
 
     for f in files:
         rel = os.path.relpath(f, WORK_DIR)
-        _run_git(["add", rel], WORK_DIR)
+        _run_git(["add", rel], cwd=WORK_DIR)
         log_lines.append(f"  added: {rel}")
 
-    _run_git(["commit", "-m", message], WORK_DIR)
+    _run_git(["commit", "-m", message], cwd=WORK_DIR)
     log_lines.append(f"  commit: {message}")
 
-    result = _run_git(["push", "origin", REPO_BRANCH], WORK_DIR)
+    result = _run_git(["push", "origin", REPO_BRANCH], cwd=WORK_DIR)
     log_lines.append(f"  push: {result.strip()}")
     return "\n".join(log_lines)
 
@@ -77,10 +75,9 @@ def list_files(rel_dir: str) -> list[str]:
 
 
 def _run_git(args: list[str], cwd: str) -> str:
-    """执行 git 命令"""
+    """执行 git 命令（cwd 用关键字参数传入）"""
     cmd = ["git"] + args
     env = os.environ.copy()
-    # 确保 SSH 能找到 key
     ssh_key = os.path.expanduser("~/.ssh/id_rsa")
     if os.path.exists(ssh_key):
         env.setdefault("GIT_SSH_COMMAND", "ssh -o StrictHostKeyChecking=no")
