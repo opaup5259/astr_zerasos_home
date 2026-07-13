@@ -1,0 +1,25 @@
+{
+  "github_user": {
+    "type": "string",
+    "description": "GitHub 用户名",
+    "hint": "如: opaup5259",
+    "default": "opaup5259"
+  },
+  "github_token": {
+    "type": "string",
+    "description": "GitHub 个人访问令牌 (Token)",
+    "hint": "需有 repo 权限",
+    "default": ""
+  },
+  "admin_ids": {
+    "type": "list",
+    "description": "管理员 ID 列表（QQ号）",
+    "hint": "一行一个",
+    "default": ["525915186"]
+  },
+  "enabled": {
+    "type": "bool",
+    "description": "是否启用插件",
+    "default": true
+  }
+}
