@@ -21,7 +21,8 @@ def ensure_repo() -> str:
         if os.path.isdir(WORK_DIR):
             shutil.rmtree(WORK_DIR, ignore_errors=True)
         os.makedirs(WORK_DIR, exist_ok=True)
-        _run_git(["clone", REPO_URL, WORK_DIR])
+        parent = os.path.dirname(WORK_DIR)
+        _run_git(["clone", REPO_URL, WORK_DIR], parent)
     return WORK_DIR
 
 

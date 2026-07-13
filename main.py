@@ -67,11 +67,22 @@ class ZerasosHomePlugin(Star):
     async def terminate(self):
         pass
 
+    # ── QQ 官方 Bot 换行处理 ──
+
+    @staticmethod
+    def _br(text: str) -> str:
+        """将 \n 替换为 <br /> 适配 QQ 官方 Bot"""
+        return str(text).replace("\n", "<br />")
+
+    def _reply(self, event, text: str):
+        """生成适配 QQ 官方 Bot 的回复"""
+        return event.plain_result(self._br(text))
+
     # ── 权限检查 ──
 
     def _check_admin(self, event: AstrMessageEvent):
         if not self._is_admin(event):
-            return "你没有权限，请联系管理员"
+            return self._br("你没有权限，请联系管理员")
         return None
 
     # ── 入口命令 ──
@@ -86,67 +97,57 @@ class ZerasosHomePlugin(Star):
         # 插件禁用检查
         if not self._enabled:
             if subcmd == "help":
-                yield event.plain_result(self._help_text())
+                yield event.plain_result(self._br(self._help_text()))
             else:
-                yield event.plain_result("插件已禁用，请在配置中将 enabled 设为 true 后重试")
+                yield event.plain_result(self._br("插件已禁用，请在配置中将 enabled 设为 true 后重试"))
             return
 
         # 权限检查：help 不需要管理员
         if subcmd != "help":
             err = self._check_admin(event)
             if err:
-                yield event.plain_result(err)
+                yield event.plain_result(self._br(err))
                 return
 
         if subcmd == "help":
-            yield event.plain_result(self._help_text())
+            yield event.plain_result(self._br(self._help_text()))
             return
 
         # ── projects ──
-        if subcmd == "projects":
-            yield event.plain_result(await self._handle_projects(parts))
-            return
-
-        if subcmd == "project":
-            parts[1] = "projects"
-            yield event.plain_result(await self._handle_projects(parts))
+        if subcmd == "projects" or subcmd == "project":
+            yield event.plain_result(self._br(await self._handle_projects(parts)))
             return
 
         # ── albums / photos ──
-        if subcmd == "albums":
-            yield event.plain_result(await self._handle_albums(parts))
-            return
-
-        if subcmd == "album":
-            parts[1] = "albums"
-            yield event.plain_result(await self._handle_albums(parts))
+        if subcmd in ("albums", "album"):
+            yield event.plain_result(self._br(await self._handle_albums(parts)))
             return
 
         if subcmd == "photos":
-            yield event.plain_result(await self._handle_photos(parts))
+            yield event.plain_result(self._br(await self._handle_photos(parts)))
             return
 
         # ── music ──
         if subcmd == "music":
-            yield event.plain_result(await self._handle_music(parts))
+            yield event.plain_result(self._br(await self._handle_music(parts)))
             return
 
         # ── chatters ──
-        if subcmd == "chatters" or subcmd == "chatter":
-            yield event.plain_result(await self._handle_chatters(parts))
+        if subcmd in ("chatters", "chatter"):
+            yield event.plain_result(self._br(await self._handle_chatters(parts)))
             return
 
         # ── moments ──
-        if subcmd == "moments" or subcmd == "moment":
-            yield event.plain_result(await self._handle_moments(parts))
+        if subcmd in ("moments", "moment"):
+            yield event.plain_result(self._br(await self._handle_moments(parts)))
             return
 
         # ── about ──
         if subcmd == "about":
-            yield event.plain_result(await self._handle_about(parts))
+            yield event.plain_result(self._br(await self._handle_about(parts)))
             return
 
-        yield event.plain_result(self._help_text())
+        yield event.plain_result(self._br(self._help_text()))
 
     # ── 帮助信息 ──
 
