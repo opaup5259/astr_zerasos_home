@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.33] - 2026-07-13
+### Fixed
+- 修复 `from main import` 在 AstrBot 运行时导致 `attempted relative import` 错误
+
 ## [1.0.32] - 2026-07-13
 ### Fixed
 - 移除 music_mgr.py 外部导入，内联到 main.py（解决服务器上没有该文件的问题）

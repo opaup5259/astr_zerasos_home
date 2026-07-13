@@ -216,12 +216,10 @@ def _inject_song_list(raw, songs):
     return raw
 
 async def list_music(user="", token=""):
-    from main import ensure_repo
     await ensure_repo(user=user, token=token)
     return _fmt_list()
 
 async def add_music(sid, user="", token=""):
-    from main import ensure_repo, commit_push
     raw = _read("siteConfig.ts")
     songs = _parse_song_list(raw)
     for s in songs:
@@ -234,7 +232,6 @@ async def add_music(sid, user="", token=""):
     return f"已添加网易云 [{sid}]"
 
 async def remove_music(sid, user="", token=""):
-    from main import ensure_repo, commit_push
     raw = _read("siteConfig.ts")
     songs = _parse_song_list(raw)
     try:
@@ -254,7 +251,6 @@ async def remove_music(sid, user="", token=""):
     return f"已删除 [{removed['id']}]"
 
 async def add_bili_music(bvid, title="", user="", token=""):
-    from main import ensure_repo, commit_push
     raw = _read("siteConfig.ts")
     songs = _parse_song_list(raw)
     for s in songs:
@@ -267,7 +263,6 @@ async def add_bili_music(bvid, title="", user="", token=""):
     return f"已添加B站 [{bvid}]"
 
 async def remove_bili_music(bvid, user="", token=""):
-    from main import ensure_repo, commit_push
     raw = _read("siteConfig.ts")
     songs = _parse_song_list(raw)
     try:
@@ -287,7 +282,6 @@ async def remove_bili_music(bvid, user="", token=""):
     return f"已删除 [{removed['id']}]"
 
 async def swap_music(idx1, idx2, user="", token=""):
-    from main import ensure_repo, commit_push
     raw = _read("siteConfig.ts")
     songs = _parse_song_list(raw)
     if not (0 <= idx1 < len(songs) and 0 <= idx2 < len(songs)):
@@ -299,7 +293,6 @@ async def swap_music(idx1, idx2, user="", token=""):
     return f"已交换第 {idx1+1} 位和第 {idx2+1} 位"
 
 async def set_music_title(idx, title, user="", token=""):
-    from main import ensure_repo, commit_push
     raw = _read("siteConfig.ts")
     songs = _parse_song_list(raw)
     if not (0 <= idx < len(songs)):
