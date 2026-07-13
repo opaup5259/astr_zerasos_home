@@ -757,17 +757,28 @@ class ZerasosHomePlugin(Star):
             if self._auto_publisher is None:
                 return "自动发布服务未初始化"
             ap = self._auto_publisher
+            import datetime as _dt
             lines = []
             lines.append(f"\u200b启用: {'\u2705' if ap._enabled else '\u274c'}")
-            lines.append(f"\u200b每日计划: {'\u2705' if ap._daily_plan_enabled else '\u274c'}")
+            lines.append(f"\u200b每日计划自启: {'\u2705' if ap._daily_plan_enabled else '\u274c (需配置 daily_plan_enabled=true)'}")
             lines.append(f"  计划时间: {ap._daily_plan_cron}")
             lines.append(f"  说说概率: {ap._shuoshuo_probability}%")
             lines.append(f"  杂谈概率: {ap._zatan_probability}%")
             lines.append(f"  最多说说/天: {ap._max_shuoshuo_per_day} (间隔>= {ap._min_shuoshuo_interval_hours}h)")
-            import datetime as _dt
             today_str = _dt.datetime.now().strftime("%Y-%m-%d")
-            lines.append(f"  今日已执行计划: {'\u2705' if ap._last_plan_date == today_str else '\u274c'}")
+            planned = ap._last_plan_date == today_str
+            lines.append(f"\u200b今日已计划: {'\u2705' if planned else '\u274c'}")
+            lines.append("")
+            if planned and ap._today_schedule:
+                type_name = {"shuoshuo": "说说", "zatan": "杂谈", "blog": "博客"}
+                lines.append("  \u2501 今日排期 \u2501")
+                for ct, tm in ap._today_schedule:
+                    label = type_name.get(ct, ct)
+                    lines.append(f"    \u2022 {tm}  {label}")
+            else:
+                lines.append("  今日排期: (无)")
             lines.append(f"  待执行发布: {len(ap._pending_tasks)} 条")
+            lines.append("")
             lines.append(f"\u200b调度器: {'\u2705 运行中' if (ap._task and not ap._task.done()) else '\u274c 已停止'}")
             return "\n".join(lines)
         if a=="plan":

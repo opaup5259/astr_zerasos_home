@@ -91,6 +91,7 @@ class AutoPublishService:
         self._max_shuoshuo_per_day = 8
         self._min_shuoshuo_interval_hours = 2
         self._pending_tasks = set()  # 已排期的发布任务
+        self._today_schedule = []   # 今日排期明细 [(content_type, hour_str), ...]
         self._last_plan_date = None  # 当天已执行过计划的日期
         self._load_config()
         # 预热缓存（立即启动，不阻塞 init）
@@ -624,6 +625,7 @@ class AutoPublishService:
             return
 
         now = datetime.datetime.now()
+        self._today_schedule = [(ct, f"{h:02d}:00") for ct, h in scheduled]
         for content_type, hour in scheduled:
             target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
             if target <= now:
