@@ -386,9 +386,9 @@ async def new_chatter(title, body, user="", token="", chatter_type="shuoshuo"):
     mood = "日常"
     
     chatter_content = "---\n"
-    chatter_content += f"title: {title}\n"
+    chatter_content += f"title: \"{_yaml_esc(title)}\"\n"
     date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    chatter_content += f"date: '{date_str}'\n"
+    chatter_content += f"date: \"{_yaml_esc(date_str)}\"\n"
     chatter_content += f"type: {type_field}\n"
     chatter_content += "tags:\n"
     for tag in tags:
@@ -435,12 +435,16 @@ async def new_moment(content, title="", location="", images=None, user="", token
     slug = now.strftime("%Y-%m-%d-%H%M%S")
     import json as _json
     
+    def _yaml_esc(s):
+        return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ').strip()
     moment_content = "---\n"
-    moment_content += f"title: {title or '动态'}\n"
+    moment_content += f"title: \"{_yaml_esc(title or '动态')}\"\n"
     date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    moment_content += f"date: '{date_str}'\n"
-    moment_content += f"content: {content}\n"
-    moment_content += f"location: '{location}'\n"
+    moment_content += f"date: \"{_yaml_esc(date_str)}\"\n"
+    moment_content += "content: |\n"
+    for line in content.split('\n'):
+        moment_content += f"  {line}\n"
+    moment_content += f"location: \"{_yaml_esc(location)}\"\n"
     moment_content += f"images: {_json.dumps(images or [], ensure_ascii=False)}\n"
     moment_content += "---\n\n"
     moment_content += content + "\n"
@@ -480,13 +484,16 @@ async def new_blog_post(title, body, user="", token=""):
     # 提取 description（前100字不带图片）
     desc = re.sub(r"!\[.*?\]\(.*?\)", "", body)
     desc = desc.strip()[:100].replace("\n", " ")
+    # 安全转义 YAML frontmatter 中的特殊字符
+    def _yaml_esc(s):
+        return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ').strip()
     post_content = f"""---
-title: {title}
+title: "{_yaml_esc(title)}"
 date: '{now.strftime("%Y-%m-%d")}'
 tags:
 - 日常
-description: '{desc}'
-cover: '{cover}'
+description: "{_yaml_esc(desc)}"
+cover: "{_yaml_esc(cover)}"
 ---
 
 {body}
