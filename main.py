@@ -188,17 +188,30 @@ async def add_photo(aid,url,caption="", user="", token=""):
 # ========== 歌单（统一管理） ==========
 
 def _fetch_remote_site_config():
-    """从 GitHub raw 拉取 siteConfig.ts 的最新内容"""
-    import requests as _req
+    """从已部署的网站 JS bundle 中提取歌曲配置"""
+    import requests as _req, re as _re
     try:
-        r = _req.get(
-            "https://raw.githubusercontent.com/opaup5259/Zerasos-Home/main/siteConfig.ts",
-            timeout=10
-        )
-        if r.status_code == 200:
-            return r.text
+        r = _req.get("https://zerasos-home.vercel.app/", timeout=15)
+        # 找到包含 cloudMusicIds 的 JS chunk
+        srcs = _re.findall(r'/_next/static/chunks/[^"]+\.js', r.text)
+        for src in set(srcs):
+            try:
+                js = _req.get("https://zerasos-home.vercel.app" + src, timeout=10).text
+                if "cloudMusicIds" in js:
+                    # 提取 cloudMusicIds 和 bilibiliIds 之间的整段配置文本
+                    idx = js.find("cloudMusicIds")
+                    # 找到 social 前面的内容作为配置段
+                    end = js.find("social:", idx)
+                    if end > idx:
+                        snippet = js[idx:end]
+                        # 转成可解析的格式
+                        # 原始: cloudMusicIds:["xxx","xxx"],bilibiliIds:["xxx"],
+                        # 保留原样返回
+                        return snippet
+            except:
+                continue
     except Exception as e:
-        logger.warning(f"远程拉取 siteConfig.ts 失败: {e}")
+        logger.warning(f"远程拉取歌曲配置失败: {e}")
     return ""
 
 

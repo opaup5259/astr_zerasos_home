@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.41]
+### Fixed
+- list_music 从已部署的 Vercel 网站 JS bundle 提取 cloudMusicIds + bilibiliIds，不再依赖 GitHub 仓库
+
 ## [1.0.40]
 ### Fixed
 - list_music 直接每次都从 GitHub raw 拉取 siteConfig.ts，不再读本地文件
