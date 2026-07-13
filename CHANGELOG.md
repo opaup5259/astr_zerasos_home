@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.39]
+### Fixed
+- list_music 若本地 siteConfig.ts 读不到 songList，自动从 GitHub raw 拉取最新版本
+
 ## [1.0.38] - 2026-07-13
 ### Fixed
 - 读操作（list）不再调用 ensure_repo，避免 git pull 覆盖本地改动导致歌单为空

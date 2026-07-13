@@ -187,6 +187,21 @@ async def add_photo(aid,url,caption="", user="", token=""):
     return f"已添加照片到相册 {aid}"
 # ========== 歌单（统一管理） ==========
 
+def _fetch_remote_site_config():
+    """从 GitHub raw 拉取 siteConfig.ts 的最新内容"""
+    import requests as _req
+    try:
+        r = _req.get(
+            "https://raw.githubusercontent.com/opaup5259/Zerasos-Home/main/siteConfig.ts",
+            timeout=10
+        )
+        if r.status_code == 200:
+            return r.text
+    except Exception as e:
+        logger.warning(f"远程拉取 siteConfig.ts 失败: {e}")
+    return ""
+
+
 def _parse_song_list(raw):
     import json, re
     m = re.search(r"songList:\s*(\[[\s\S]*?\])", raw)
@@ -221,7 +236,7 @@ def _make_song_list_text(songs):
     return "\n".join(lines)
 
 def _fmt_list():
-    raw = _read("siteConfig.ts")
+    raw = _read("siteConfig.ts") or _fetch_remote_site_config()
     songs = _parse_song_list(raw)
     if not songs:
         return "歌单为空"
