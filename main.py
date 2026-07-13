@@ -230,11 +230,11 @@ def _parse_song_list(raw):
         except:
             pass
     songs = []
-    m1 = re.search(r"cloudMusicIds:\s*\[([^\]]*)\\]", raw)
+    m1 = re.search(r"cloudMusicIds:\s*\[([^\]]*)\]", raw)
     if m1:
         for sid in re.findall(r'"([^"]+)"', m1.group(1)):
             songs.append({"type": "wyy", "id": sid, "title": ""})
-    m2 = re.search(r"bilibiliIds:\s*\[([^\]]*)\\]", raw)
+    m2 = re.search(r"bilibiliIds:\s*\[([^\]]*)\]", raw)
     if m2:
         for bvid in re.findall(r'"([^"]+)"', m2.group(1)):
             songs.append({"type": "bili", "id": bvid, "title": ""})
