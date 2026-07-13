@@ -57,17 +57,47 @@ async def _git(args, cwd=None, user="", token=""):
 
 async def ensure_repo(user="", token=""):
     url = _repo_url(user, token) if user and token else _repo_url()
-    # pull/clone 走 gh-proxy 加速（国内服务器友好）
-    proxy_cfg = ["-c", "url.https://gh-proxy.com/https://github.com/.insteadOf=https://github.com/"]
+    # pull/clone 代理列表：原代理 + 三个保底 + 直连
+    _PROXY_LIST = [
+        "https://gh-proxy.com/https://github.com/",     # 原代理
+        "https://gh.dpik.top/https://github.com/",      # 保底1
+        "https://hk.gh-proxy.com/https://github.com/",  # 保底2
+        "https://edgeone.gh-proxy.com/https://github.com/", # 保底3
+        "https://github.com/",                           # 直连
+    ]
     if os.path.isdir(os.path.join(_WORK_DIR, ".git")):
         await _git(["remote", "set-url", "origin", url], user=user, token=token)
-        await _git(proxy_cfg + ["pull", "origin", _REPO_BRANCH], user=user, token=token)
+        last_err = None
+        for proxy in _PROXY_LIST:
+            try:
+                proxy_cfg = ["-c", f"url.{proxy}.insteadOf=https://github.com/"]
+                await _git(proxy_cfg + ["pull", "origin", _REPO_BRANCH], user=user, token=token)
+                last_err = None
+                break
+            except RuntimeError as e:
+                last_err = e
+                logger.warning(f"Git pull 代理 [{proxy}] 失败: {str(e)[:100]}，尝试下一个...")
+                continue
+        if last_err:
+            raise RuntimeError(f"所有代理均无法 pull: {str(last_err)[:200]}")
     else:
         if os.path.isdir(_WORK_DIR):
             shutil.rmtree(_WORK_DIR, ignore_errors=True)
         parent = os.path.dirname(_WORK_DIR)
         os.makedirs(parent, exist_ok=True)
-        await _git(proxy_cfg + ["clone", url, _WORK_DIR], cwd=parent, user=user, token=token)
+        last_err = None
+        for proxy in _PROXY_LIST:
+            try:
+                proxy_cfg = ["-c", f"url.{proxy}.insteadOf=https://github.com/"]
+                await _git(proxy_cfg + ["clone", url, _WORK_DIR], cwd=parent, user=user, token=token)
+                last_err = None
+                break
+            except RuntimeError as e:
+                last_err = e
+                logger.warning(f"Git clone 代理 [{proxy}] 失败: {str(e)[:100]}，尝试下一个...")
+                continue
+        if last_err:
+            raise RuntimeError(f"所有代理均无法 clone: {str(last_err)[:200]}")
 
 async def commit_push(files, msg, user="", token=""):
     await ensure_repo(user=user, token=token)

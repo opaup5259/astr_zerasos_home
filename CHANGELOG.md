@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.37] - 2026-07-13
+### Changed
+- ensure_repo 多代理保底：gh-proxy.com → gh.dpik.top → hk.gh-proxy.com → edgeone.gh-proxy.com → 直连
+- 每个代理依次尝试，失败自动切换下一个
+
+## [1.0.36] - 2026-07-13
+### Fixed
+- 移除 ensure_repo 中的 git pull（国内服务器网络不稳），clone 改用 --depth 1
+
 ## [1.0.35] - 2026-07-13
 ### Fixed
 - pull/clone 走 gh-proxy.com 代理，解决国内服务器 GnuTLS 连接失败
