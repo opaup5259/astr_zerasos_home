@@ -3,7 +3,9 @@ Auto-publish module — LLM 驱动的说说自动发布 + 定时调度
 独立模块，main.py 仅为入口
 """
 import asyncio
+import collections
 import datetime
+import inspect
 import logging
 import random
 import re
@@ -122,19 +124,24 @@ class AutoPublishService:
 
             # ====== 人格系统 ======
             persona_text = ""
+            persona_name = ""
             try:
                 if hasattr(self.context, 'persona_manager') and self.context.persona_manager:
-                    persona = self.context.persona_manager.get_current_persona()
-                    if persona and hasattr(persona, 'prompt') and persona.prompt:
-                        persona_text = persona.prompt
+                    # PersonaManager.get_default_persona_v3() is async, returns Personality dict-like object
+                    persona = await self.context.persona_manager.get_default_persona_v3()
+                    if persona and persona.get('prompt'):
+                        persona_text = persona['prompt']
+                        persona_name = persona.get('name', 'unknown')
                         persona_used = True
-                        logger.info(f"已加载人格: 泽拉索斯")
+                        logger.info(f"已加载人格: {persona_name}")
+                        if persona.get('begin_dialogs'):
+                            persona_text += "\n\n情景预设对话:\n" + "\n".join(persona.get('begin_dialogs', []))
             except Exception as e:
                 logger.warning(f"人格加载失败: {e}")
 
             if debug_info is not None:
                 if persona_used:
-                    debug_info.append(f"🧑 人格已加载: 泽拉索斯")
+                    debug_info.append(f"🧑 人格已加载: {persona_name} ({persona_text[:60]}…)" if len(persona_text) > 60 else f"🧑 人格已加载: {persona_name} ({persona_text})")
                 else:
                     debug_info.append("ℹ️ 人格管理器未启用，使用默认系统提示")
 
@@ -149,17 +156,17 @@ class AutoPublishService:
                         top_k_fusion=10,
                         top_m_final=3,
                     )
-                    if result and result.get("chunks"):
+                    # retrieve() returns {"context_text": str, "results": [{chunk_id,doc_id,kb_id,kb_name,doc_name,content,score,...}]}
+                    if result and result.get("results"):
                         texts = []
-                        for c in result["chunks"]:
+                        for c in result["results"]:
                             texts.append(f"[{c.get('kb_name','?')}] {c.get('content','')}")
                         if texts:
                             kb_context = "\n\n以下是与当前主题相关的知识库内容，请参考：\n" + "\n---\n".join(texts)
                             kb_used = True
                             kb_count = len(texts)
                             # 统计各知识库匹配数
-                            from collections import Counter
-                            kb_counter = Counter(c.get('kb_name','?') for c in result["chunks"])
+                            kb_counter = collections.Counter(c.get('kb_name','?') for c in result["results"])
                             kb_total = sum(kb_counter.values())
                             logger.info(f"知识库检索到 {kb_count} 条相关内容 (共检索 {kb_total} 个片段)")
                 except Exception as e:
@@ -182,7 +189,9 @@ class AutoPublishService:
                 if kb_used:
                     debug_info.append(f"📚 知识库已检索: 匹配到 {kb_count} 条相关内容")
                     if kb_total > 0:
-                        debug_info.append(f"📊 知识库检索统计: 共扫描 {kb_total} 个知识片段")
+                        # 显示各库分布
+                        kb_details = ', '.join(f'{k}:{v}' for k, v in collections.Counter(c.get('kb_name','?') for c in result['results']).items())
+                        debug_info.append(f"📊 知识库命中分布: {kb_details}")
                 else:
                     debug_info.append("ℹ️ 知识库: 未检索到相关内容")
 
@@ -372,14 +381,21 @@ class AutoPublishService:
 
             # 尝试从上下文加载人格信息
             persona_loaded = False
+            persona_name = ""
             try:
                 if hasattr(self.context, 'persona_manager') and self.context.persona_manager:
-                    persona = self.context.persona_manager.get_current_persona()
-                    if persona and hasattr(persona, 'prompt') and persona.prompt:
-                        debug_info.append(f"🧑 人格已加载: 泽拉索斯 (prompt: {persona.prompt[:80]}…)")
+                    # PersonaManager.get_default_persona_v3() is async
+                    persona = self.context.persona_manager.get_default_persona_v3()
+                    if inspect.isawaitable(persona):
+                        persona = await persona
+                    if persona and persona.get('prompt'):
+                        pname = persona.get('name', 'unknown')
+                        prompt_preview = persona['prompt'][:80]
+                        debug_info.append(f"🧑 人格已加载: {pname} (prompt: {prompt_preview}…)" if len(persona['prompt']) > 80 else f"🧑 人格已加载: {pname} (prompt: {persona['prompt']})")
                         persona_loaded = True
-            except Exception:
-                pass
+                        persona_name = pname
+            except Exception as e:
+                logger.debug(f"force_run人格加载: {e}")
 
             if not persona_loaded:
                 debug_info.append(f"🤖 默认角色: {system_prompt[:60]}…" if len(system_prompt) > 60 else f"🤖 默认角色: {system_prompt}")
