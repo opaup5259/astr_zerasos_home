@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.32] - 2026-07-13
+### Fixed
+- 移除 music_mgr.py 外部导入，内联到 main.py（解决服务器上没有该文件的问题）
+
 ## [1.0.31] - 2026-07-13
 ### Fixed
 - 修复 list 命令返回 coroutine object（缺少 await）

@@ -153,87 +153,162 @@ async def add_photo(aid,url,caption="", user="", token=""):
     _write("data/albums.ts",c)
     await commit_push(["data/albums.ts"],f"chore: add photo to album {aid}",user=user,token=token)
     return f"已添加照片到相册 {aid}"
-# ========== 歌单（统一管理，见 music_mgr.py） ==========
+# ========== 歌单（统一管理） ==========
+
+def _parse_song_list(raw):
+    import json, re
+    m = re.search(r"songList:\s*(\[[\s\S]*?\])", raw)
+    if m:
+        a = m.group(1)
+        a = re.sub(r"//.*?\n", "\n", a)
+        a = re.sub(r",\s*}", "}", a)
+        a = re.sub(r",\s*]", "]", a)
+        try:
+            songs = json.loads(a)
+            if isinstance(songs, list):
+                return songs
+        except:
+            pass
+    songs = []
+    m1 = re.search(r"cloudMusicIds:\s*\[([^\]]*)\\]", raw)
+    if m1:
+        for sid in re.findall(r'"([^"]+)"', m1.group(1)):
+            songs.append({"type": "wyy", "id": sid, "title": ""})
+    m2 = re.search(r"bilibiliIds:\s*\[([^\]]*)\\]", raw)
+    if m2:
+        for bvid in re.findall(r'"([^"]+)"', m2.group(1)):
+            songs.append({"type": "bili", "id": bvid, "title": ""})
+    return songs
+
+def _make_song_list_text(songs):
+    lines = ["  songList: ["]
+    for s in songs:
+        entry = json.dumps(s, ensure_ascii=False)
+        lines.append(f"    {entry},")
+    lines.append("  ],")
+    return "\n".join(lines)
+
+def _fmt_list():
+    raw = _read("siteConfig.ts")
+    songs = _parse_song_list(raw)
+    if not songs:
+        return "歌单为空"
+    lines = []
+    for i, s in enumerate(songs):
+        src = "网易云" if s.get("type") == "wyy" else "B站"
+        tid = s.get("title", "") or ""
+        tag = f" [{tid}]" if tid else ""
+        lines.append(f"  {i+1}. [{src}] {s['id']}{tag}")
+    return "歌单:\n" + "\n".join(lines)
+
+def _inject_song_list(raw, songs):
+    new_block = _make_song_list_text(songs)
+    if "songList:" in raw:
+        return re.sub(r"\s*songList:\s*\[[\s\S]*?\],", "\n" + new_block, raw)
+    pos = raw.rfind("cloudMusicIds:")
+    if pos >= 0:
+        end = raw.find("\n", pos)
+        return raw[:end+1] + "\n" + new_block + raw[end+1:]
+    pos = raw.find("export const siteConfig = {")
+    if pos >= 0:
+        end = raw.find("{", pos) + 1
+        return raw[:end] + "\n" + new_block + raw[end:]
+    return raw
+
 async def list_music(user="", token=""):
-    from music_mgr import format_list
     from main import ensure_repo
     await ensure_repo(user=user, token=token)
-    return format_list()
+    return _fmt_list()
 
 async def add_music(sid, user="", token=""):
-    from music_mgr import do_add
-    return await do_add("wyy", sid, "", user=user, token=token)
+    from main import ensure_repo, commit_push
+    raw = _read("siteConfig.ts")
+    songs = _parse_song_list(raw)
+    for s in songs:
+        if s["type"] == "wyy" and s["id"] == sid:
+            return f"网易云 {sid} 已在列表"
+    songs.append({"type": "wyy", "id": sid, "title": ""})
+    _write("siteConfig.ts", _inject_song_list(raw, songs))
+    await ensure_repo(user=user, token=token)
+    await commit_push(["siteConfig.ts"], "chore: update playlist", user=user, token=token)
+    return f"已添加网易云 [{sid}]"
 
 async def remove_music(sid, user="", token=""):
-    from music_mgr import do_remove
-    return await do_remove("wyy", sid, user=user, token=token)
+    from main import ensure_repo, commit_push
+    raw = _read("siteConfig.ts")
+    songs = _parse_song_list(raw)
+    try:
+        idx = int(sid) - 1
+    except ValueError:
+        idx = -1
+        for i, s in enumerate(songs):
+            if s["type"] == "wyy" and s["id"] == sid:
+                idx = i
+                break
+    if idx < 0 or idx >= len(songs):
+        return f"未找到 {sid}"
+    removed = songs.pop(idx)
+    _write("siteConfig.ts", _inject_song_list(raw, songs))
+    await ensure_repo(user=user, token=token)
+    await commit_push(["siteConfig.ts"], "chore: update playlist", user=user, token=token)
+    return f"已删除 [{removed['id']}]"
 
 async def add_bili_music(bvid, title="", user="", token=""):
-    from music_mgr import do_add
-    return await do_add("bili", bvid, title, user=user, token=token)
+    from main import ensure_repo, commit_push
+    raw = _read("siteConfig.ts")
+    songs = _parse_song_list(raw)
+    for s in songs:
+        if s["type"] == "bili" and s["id"] == bvid:
+            return f"B站 {bvid} 已在列表"
+    songs.append({"type": "bili", "id": bvid, "title": title})
+    _write("siteConfig.ts", _inject_song_list(raw, songs))
+    await ensure_repo(user=user, token=token)
+    await commit_push(["siteConfig.ts"], "chore: update playlist", user=user, token=token)
+    return f"已添加B站 [{bvid}]"
 
 async def remove_bili_music(bvid, user="", token=""):
-    from music_mgr import do_remove
-    return await do_remove("bili", bvid, user=user, token=token)
+    from main import ensure_repo, commit_push
+    raw = _read("siteConfig.ts")
+    songs = _parse_song_list(raw)
+    try:
+        idx = int(bvid) - 1
+    except ValueError:
+        idx = -1
+        for i, s in enumerate(songs):
+            if s["type"] == "bili" and s["id"] == bvid:
+                idx = i
+                break
+    if idx < 0 or idx >= len(songs):
+        return f"未找到 {bvid}"
+    removed = songs.pop(idx)
+    _write("siteConfig.ts", _inject_song_list(raw, songs))
+    await ensure_repo(user=user, token=token)
+    await commit_push(["siteConfig.ts"], "chore: update playlist", user=user, token=token)
+    return f"已删除 [{removed['id']}]"
 
 async def swap_music(idx1, idx2, user="", token=""):
-    from music_mgr import do_swap
-    return await do_swap(idx1, idx2, user=user, token=token)
+    from main import ensure_repo, commit_push
+    raw = _read("siteConfig.ts")
+    songs = _parse_song_list(raw)
+    if not (0 <= idx1 < len(songs) and 0 <= idx2 < len(songs)):
+        return "序号超出范围"
+    songs[idx1], songs[idx2] = songs[idx2], songs[idx1]
+    _write("siteConfig.ts", _inject_song_list(raw, songs))
+    await ensure_repo(user=user, token=token)
+    await commit_push(["siteConfig.ts"], "chore: update playlist", user=user, token=token)
+    return f"已交换第 {idx1+1} 位和第 {idx2+1} 位"
 
 async def set_music_title(idx, title, user="", token=""):
-    from music_mgr import do_title
-    return await do_title(idx, title, user=user, token=token)
-
-def list_chatters():
-    res=[]
-    for f in _listdir("chatters"):
-        if not f.endswith(".md"): continue
-        m=_parse_fm(_read(f"chatters/{f}")); res.append({"file":f,"title":m.get("title",""),"date":m.get("date","")})
-    return sorted(res,key=lambda x:x.get("date",""),reverse=True)
-async def new_chatter(title,body,tags=None, user="", token=""):
-    now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"); slug=now.split(" ")[0]
-    fs=[f for f in _listdir("chatters") if f.startswith(slug)]
-    if fs: slug+=f"-{len(fs)}"
-    meta={"title":title,"date":f"'{now}'","tags":tags or ["日常"],"mood":"","cover":"","description":""}
-    full="---\n"+yaml.dump(meta,allow_unicode=True,default_flow_style=False,sort_keys=False)+"---\n\n"+body+"\n"
-    _write(f"chatters/{slug}.md",full)
-    await commit_push([f"chatters/{slug}.md"],f"chore: add chatter {title}",user=user,token=token)
-    return f"已发布说说 [{title}]"
-async def del_chatter(fname, user="", token=""):
-    full=f"chatters/{fname}"
-    if not os.path.exists(os.path.join(_WORK_DIR,full)): return f"未找到 {fname}"
-    _delete(full); await commit_push([full],f"chore: delete chatter {fname}",user=user,token=token)
-    return f"已删除说说 {fname}"
-def list_moments():
-    res=[]
-    for f in _listdir("moments"):
-        if not f.endswith(".md"): continue
-        m=_parse_fm(_read(f"moments/{f}")); res.append({"file":f,"id":m.get("id",""),"date":m.get("date","")})
-    return sorted(res,key=lambda x:x.get("date",""),reverse=True)
-async def new_moment(body,location="",images=None, user="", token=""):
-    now=datetime.datetime.now(); mid=f"moment-{int(now.timestamp()*1000)}"
-    ds=now.strftime("%Y-%m-%dT%H:%M:%S.")+f"{now.microsecond//1000:03d}Z"
-    meta={"id":mid,"date":f"'{ds}'","location":location,"images":images or []}
-    full="---\n"+yaml.dump(meta,allow_unicode=True,default_flow_style=False,sort_keys=False)+"---\n\n"+body+"\n"
-    _write(f"moments/{mid}.md",full)
-    await commit_push([f"moments/{mid}.md"],"chore: add moment",user=user,token=token)
-    return f"已发布动态 {mid}"
-async def del_moment(mid, user="", token=""):
-    files=_listdir("moments"); t=[f for f in files if mid in f]
-    if not t: return f"未找到动态 {mid}"
-    _delete(f"moments/{t[0]}")
-    await commit_push([f"moments/{t[0]}"],f"chore: delete moment {t[0]}",user=user,token=token)
-    return f"已删除动态 {t[0]}"
-def get_about():
-    c=_read("app/about/about.md")
-    if not c: return {"title":"","content":""}
-    m=_parse_fm(c); return {"title":m.get("title",""),"content":_strip_fm(c).strip()}
-async def set_about(title,body, user="", token=""):
-    meta={"title":title,"date":f"'{datetime.datetime.now().strftime('%Y-%m-%d')}'","tags":[],"mood":"","cover":"","description":""}
-    full="---\n"+yaml.dump(meta,allow_unicode=True,default_flow_style=False,sort_keys=False)+"---\n\n"+body+"\n"
-    _write("app/about/about.md",full)
-    await commit_push(["app/about/about.md"],"chore: update about",user=user,token=token)
-    return "关于页面已更新"
+    from main import ensure_repo, commit_push
+    raw = _read("siteConfig.ts")
+    songs = _parse_song_list(raw)
+    if not (0 <= idx < len(songs)):
+        return "序号超出范围"
+    songs[idx]["title"] = title
+    _write("siteConfig.ts", _inject_song_list(raw, songs))
+    await ensure_repo(user=user, token=token)
+    await commit_push(["siteConfig.ts"], "chore: update playlist", user=user, token=token)
+    return f"已设置第 {idx+1} 位标题为「{title}」"
 
 # ========== 插件主类 ==========
 @register("astr_zerasos_home", "opaup", "Zerasos-Home 博客管理 - GitHub + Vercel 一键管理", "1.0.12")
