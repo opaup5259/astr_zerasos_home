@@ -73,10 +73,7 @@ async def commit_push(files, msg, user="", token=""):
         await _git(["add", f], user=user, token=token)
     await _git(["-c", "user.name=opaup5259", "-c", "user.email=opaup5259@gmail.com",
               "commit", "-m", msg], user=user, token=token)
-    # 直推 + 临时禁用 url.insteadOf 避免 gh-proxy 拦截 push
-    push_url = _repo_url(user, token) if user and token else _repo_url()
-    await _git(["-c", "url.https://github.com/.insteadOf=",
-              "push", push_url, f"HEAD:{_REPO_BRANCH}"], user=user, token=token)
+    await _git(["push", "origin", _REPO_BRANCH], user=user, token=token)
 
 # ========== 文件 ==========
 def _read(rel):
@@ -159,6 +156,9 @@ async def add_photo(aid,url,caption="", user="", token=""):
 def list_music():
     c=_read("siteConfig.ts"); m=re.search(r"cloudMusicIds:\s*\[([^\]]*)\]",c)
     return re.findall(r'"([^"]+)"',m.group(1)) if m else []
+def list_bili_music():
+    c=_read("siteConfig.ts"); m=re.search(r"bilibiliIds:\s*\[([^\]]*)\\]",c)
+    return re.findall(r'"([^"]+)"',m.group(1)) if m else []
 async def add_music(sid, user="", token=""):
     c=_read("siteConfig.ts")
     if sid in list_music(): return f"歌曲 {sid} 已在列表"
@@ -172,6 +172,20 @@ async def remove_music(sid, user="", token=""):
     _write("siteConfig.ts",c)
     await commit_push(["siteConfig.ts"],f"chore: remove music {sid}",user=user,token=token)
     return f"已移除歌曲 {sid}"
+async def add_bili_music(bvid, user="", token=""):
+    c=_read("siteConfig.ts")
+    if bvid in list_bili_music(): return f"B站视频 {bvid} 已在列表"
+    c=re.sub(r'(bilibiliIds:\s*\[)',lambda m: m.group(1)+f' "{bvid}",',c)
+    _write("siteConfig.ts",c)
+    await commit_push(["siteConfig.ts"],f"chore: add bilibili {bvid}",user=user,token=token)
+    return f"已添加B站视频 {bvid}"
+async def remove_bili_music(bvid, user="", token=""):
+    c=_read("siteConfig.ts")
+    bvid_esc=re.escape(bvid)
+    c=re.sub(r',?\s*"'+bvid_esc+r'"',"",c); c=re.sub(r'(\[)\s*,',r'\1',c); c=re.sub(r',\s*(\])',r'\1',c)
+    _write("siteConfig.ts",c)
+    await commit_push(["siteConfig.ts"],f"chore: remove bilibili {bvid}",user=user,token=token)
+    return f"已移除B站视频 {bvid}"
 def list_chatters():
     res=[]
     for f in _listdir("chatters"):
@@ -282,7 +296,7 @@ class ZerasosHomePlugin(Star):
             if not self._is_admin(event): yield event.plain_result(self._br("你没有权限")); return
             if not self._enabled: yield event.plain_result(self._br("插件已禁用")); return
         if subcmd=="help":
-            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list<br/>  /zh music add <网易云ID><br/>  /zh music del <网易云ID><br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish - 强制运行一次自动发布说说<br/>  /zh ai status - 查看自动发布状态<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
+            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list<br/>  /zh music add <网易云ID><br/>  /zh music del <网易云ID><br/>  /zh music bili add <BV号><br/>  /zh music bili del <BV号><br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish - 强制运行一次自动发布说说<br/>  /zh ai status - 查看自动发布状态<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
             return
         try:
             user=self._github_user; token=self._github_token
@@ -351,16 +365,34 @@ class ZerasosHomePlugin(Star):
         return await add_photo(args[0].strip(),args[1].strip(),args[2].strip() if len(args)>2 else "",user=user,token=token)
 
     async def _cmd_music(self,parts,user="",token=""):
-        if len(parts)<3: return "用法: /zh music <list|add|del>"
+        if len(parts)<3: return "用法: /zh music <list|add|del|bili>"
         await ensure_repo(user=user,token=token); a=parts[2].lower()
         if a=="list":
-            ids=list_music(); return "歌单为空" if not ids else "歌单:\n"+"\n".join(f"  {i+1}. {sid}" for i,sid in enumerate(ids))
+            ids=list_music(); bili=list_bili_music()
+            lines=[]
+            if ids: lines.append("网易云歌单:"); lines.extend(f"  {i+1}. {sid}" for i,sid in enumerate(ids))
+            if bili: lines.append("B站歌单:"); lines.extend(f"  {i+1}. {bvid}" for i,bvid in enumerate(bili))
+            return "\n".join(lines) if lines else "歌单为空"
         if a=="add":
             if len(parts)<4: return "用法: /zh music add <网易云ID>"
             return await add_music(parts[3],user=user,token=token)
         if a in("del","remove"):
             if len(parts)<4: return "用法: /zh music del <网易云ID>"
             return await remove_music(parts[3],user=user,token=token)
+        if a=="bili":
+            return await self._cmd_bili(parts,user,token)
+
+    async def _cmd_bili(self,parts,user="",token=""):
+        """管理 B站歌单"""
+        if len(parts)<4: return "用法: /zh music bili <add|del> <BV号>"
+        await ensure_repo(user=user,token=token); a=parts[3].lower()
+        if a=="add":
+            if len(parts)<5: return "用法: /zh music bili add <BV号>"
+            return await add_bili_music(parts[4],user=user,token=token)
+        if a in("del","remove"):
+            if len(parts)<5: return "用法: /zh music bili del <BV号>"
+            return await remove_bili_music(parts[4],user=user,token=token)
+        return "用法: /zh music bili <add|del> <BV号>"
 
     async def _cmd_chatters(self,parts,user="",token=""):
         if len(parts)<3: return "用法: /zh chatters <list|add|del>"

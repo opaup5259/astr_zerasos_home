@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.27] - 2026-07-13
+### 新增
+- B站音源支持：/zh music bili add/del <BV号>
+- 歌单 list 同时显示网易云ID和B站BV号
+
+### 博客变更（外部）
+- siteConfig.ts 新增 bilibiliIds 字段
+- 新增 /api/music/bilibili 路由，从 B站 DASH 流拉取纯音频
+- 音乐 API 增加 proxy fallback 获取播放地址
+
 ## [1.0.26] - 2026-07-13
 ### Fixed
 - 修复 git push 因服务器 gh-proxy url.insteadOf 配置导致推送被吞的问题
