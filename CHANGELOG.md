@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.25] - 2026-07-13
+### Fixed
+- 修复 git commit 因服务器缺少 user.name/user.email 配置而失败
+- 在 commit_push 中通过 git -c 参数内联指定 Author 信息
+
 ## [1.0.24] - 2026-07-13
 ### Fixed
 - 修复 _conf_schema.json 使用 object/sub 嵌套配置导致 AstrBot 加载失败

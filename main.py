@@ -71,7 +71,8 @@ async def commit_push(files, msg, user="", token=""):
     await ensure_repo(user=user, token=token)
     for f in files:
         await _git(["add", f], user=user, token=token)
-    await _git(["commit", "-m", msg], user=user, token=token)
+    await _git(["-c", "user.name=opaup5259", "-c", "user.email=opaup5259@gmail.com",
+              "commit", "-m", msg], user=user, token=token)
     await _git(["push", "origin", _REPO_BRANCH], user=user, token=token)
 
 # ========== 文件 ==========
