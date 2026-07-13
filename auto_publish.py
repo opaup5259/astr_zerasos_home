@@ -143,8 +143,8 @@ class AutoPublishService:
                 prompt=prompt,
                 system_prompt=sp,
             )
-            if hasattr(result, "text"):
-                return result.text
+            if hasattr(result, "completion_text") and result.completion_text:
+                return result.completion_text
             if isinstance(result, str):
                 return result
             return str(result)
