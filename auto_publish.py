@@ -79,11 +79,10 @@ class AutoPublishService:
         self._load_config()
 
     def _load_config(self):
-        ap = self.config.get("auto_publish", {})
-        self._enabled = bool(ap.get("enabled", False))
-        self._cron = str(ap.get("cron", "30 8 * * *")).strip()
-        self._prompt = str(ap.get("llm_prompt", "")).strip() or self.DEFAULT_PROMPT
-        self._last_publish_file = None  # 不在构造时加载文件状态
+        self._enabled = bool(self.config.get("auto_publish_enabled", False))
+        self._cron = str(self.config.get("auto_publish_cron", "30 8 * * *")).strip()
+        prompt = str(self.config.get("auto_publish_llm_prompt", "")).strip()
+        self._prompt = prompt or self.DEFAULT_PROMPT
 
     def on_config_update(self, config: dict):
         self.config = config or {}

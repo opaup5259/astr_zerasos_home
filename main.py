@@ -278,7 +278,7 @@ class ZerasosHomePlugin(Star):
             if not self._is_admin(event): yield event.plain_result(self._br("你没有权限")); return
             if not self._enabled: yield event.plain_result(self._br("插件已禁用")); return
         if subcmd=="help":
-            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list<br/>  /zh music add <网易云ID><br/>  /zh music del <网易云ID><br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish - 强制运行一次自动发布说说<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
+            yield event.plain_result(self._br("=== Zerasos-Home 博客管理 ===<br/><br/>【项目】<br/>  /zh projects list<br/>  /zh projects add 名称|描述|图标|URL|标签1,标签2<br/>  /zh projects del <id><br/>  /zh projects edit <id> <字段> <值><br/><br/>【相册】<br/>  /zh albums list<br/>  /zh albums add 标题|描述|封面URL|日期<br/>  /zh albums del <id><br/>  /zh photos add <album_id>|图URL|描述<br/><br/>【歌单】<br/>  /zh music list<br/>  /zh music add <网易云ID><br/>  /zh music del <网易云ID><br/><br/>【说说】<br/>  /zh chatters list<br/>  /zh chatters add 标题 | 内容<br/>  /zh chatters del <文件名><br/><br/>【动态】<br/>  /zh moments list<br/>  /zh moments add 内容<br/>  /zh moments del <id><br/><br/>【关于】<br/>  /zh about<br/>  /zh about edit 标题 | 内容<br/><br/>【AI 自动发布】<br/>  /zh ai publish - 强制运行一次自动发布说说<br/>  /zh ai status - 查看自动发布状态<br/><br/>【配置】<br/>  /zh config auto_publish - 查看自动发布配置<br/><br/>修改后自动提交 GitHub"))
             return
         try:
             user=self._github_user; token=self._github_token
@@ -422,11 +422,10 @@ class ZerasosHomePlugin(Star):
         if len(parts)<3: return "用法: /zh config <字段>"
         a=parts[2].lower()
         if a=="auto_publish":
-            ap=self.config.get("auto_publish",{})
             lines=["=== 自动发布配置 ==="]
-            lines.append(f"  启用: {ap.get('enabled',False)}")
-            lines.append(f"  Cron: {ap.get('cron','30 8 * * *')}")
-            prompt=ap.get('llm_prompt','')
+            lines.append(f"  启用: {self.config.get('auto_publish_enabled',False)}")
+            lines.append(f"  Cron: {self.config.get('auto_publish_cron','30 8 * * *')}")
+            prompt=self.config.get('auto_publish_llm_prompt','')
             lines.append(f"  自定义Prompt: {'有' if prompt else '无（使用默认）'}")
             return "\n".join(lines)
         return f"未知配置字段: {a}"

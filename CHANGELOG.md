@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.24] - 2026-07-13
+### Fixed
+- 修复 _conf_schema.json 使用 object/sub 嵌套配置导致 AstrBot 加载失败
+- 配置拍平：auto_publish 改为 auto_publish_enabled / auto_publish_cron / auto_publish_llm_prompt 三个独立字段
+
 ## [1.0.23] - 2026-07-13
 ### Fixed
 - 修复 _conf_schema.json 中 admin_ids 缺少 items 字段导致 AstrBot 加载失败（KeyError: 'items'）
